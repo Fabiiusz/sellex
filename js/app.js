@@ -137,7 +137,12 @@ var state = {
 };
 
 // Pedidos: só os reais. Ficam vazios até os pedidos do Mercado Livre serem integrados.
-function loadOrders(){ return []; }
+// Exceção: o modo demonstração (5 cliques na logo) guarda pedidos simulados aqui.
+var DEMO_ORDERS_KEY = "sx_demo_orders_v1";
+function loadOrders(){
+  var demo = loadJSON(DEMO_ORDERS_KEY, null);
+  return Array.isArray(demo) ? demo : [];
+}
 
 function productById(id){ return state.products.find(function(p){ return p.id===id; }); }
 function validOrders(list){ return list.filter(function(o){ return o.status !== "cancelado"; }); }
@@ -1424,6 +1429,28 @@ function startCatalog(){
     toast("Não consegui carregar o catálogo do C7 Drop.", true);
   });
 }
+
+/* ================= ponte do modo demonstração =================
+   Usada só por js/sellex-demo.js (gerador de métricas simuladas). */
+window.SellexApp = {
+  state: state,
+  CHANNELS: CHANNELS,
+  productById: productById,
+  isoDate: isoDate,
+  currentPage: currentPage,
+  goToPage: goToPage,
+  renderPainel: renderPainel,
+  toast: toast,
+  setDemoOrders: function(orders){
+    state.orders = orders || [];
+    if (orders && orders.length) saveJSON(DEMO_ORDERS_KEY, orders);
+    else { try{ window.localStorage.removeItem(DEMO_ORDERS_KEY); }catch(e){} }
+    renderPainel();
+    var pg = currentPage();
+    if (pg !== "painel") goToPage(pg, true);
+  },
+  clearDemoOrders: function(){ this.setDemoOrders([]); }
+};
 
 document.addEventListener("DOMContentLoaded", function(){ init(); startAuth(); });
 })();

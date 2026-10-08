@@ -38,3 +38,19 @@ atualizada sozinha a partir do C7 Drop. Precisa de internet para carregar.
 - Endereço de retorno para cadastrar no app do Mercado Livre:
   `https://vcqntqhfyollatevvntq.supabase.co/functions/v1/ml-callback`
 
+## Modo demonstração (gerador de métricas)
+
+Para demonstrar o painel sem vendas reais: **5 cliques seguidos na logo do cabeçalho**
+abrem o gerador de métricas. Fecha no × , com Esc ou clicando fora.
+
+Dá para escolher período (hoje, 7, 30 ou 90 dias), pedidos por dia, margem,
+taxa de cancelamento, crescimento e quais marketplaces entram. O campo **semente**
+faz o gerador repetir sempre os mesmos números, o que ajuda para gravar vídeo ou tirar print.
+
+Os pedidos simulados usam os produtos que já estão na conta e ficam salvos no
+`localStorage` (`sx_demo_orders_v1`), então continuam ao recarregar a página.
+O botão **Limpar simulação** apaga tudo e o painel volta aos dados reais.
+Também é possível baixar os pedidos em JSON ou CSV.
+
+Arquivos: `js/sellex-demo.js` (a janela e o gerador) e a ponte `window.SellexApp`
+no fim de `js/app.js`.
