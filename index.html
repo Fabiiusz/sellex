@@ -175,12 +175,7 @@
             </div>
           </div>
 
-          <div class="sx-card sx-card--glow">
-            <span class="sx-eyebrow">Dica rápida</span>
-            <h3 class="sx-title" style="font-size:22px;margin:8px 0 6px">Fique de olho no <span class="sx-grad">estoque baixo</span></h3>
-            <p class="sx-muted" style="font-size:14px;margin:0 0 18px">Produtos parados por falta de estoque perdem posição nos canais.</p>
-            <a class="sx-btn sx-btn--block sx-btn--shine" href="#" data-goto="produtos">Ver produtos</a>
-          </div>
+          <div class="sx-card sx-card--glow" id="onboarding"></div>
         </div>
       </div>
     </section>
@@ -188,7 +183,7 @@
     <!-- ===================== PRODUTOS ===================== -->
     <section id="page-produtos" class="page">
       <div class="page-head">
-        <div><h1 class="sx-title">Produtos</h1><p class="sx-muted">Seus produtos do fornecedor C7 Drop, com custo, estoque e lucro de cada um.</p></div>
+        <div><h1 class="sx-title">Produtos</h1><p class="sx-muted">Os produtos que você escolheu na Mineração, com custo, estoque e lucro de cada um.</p></div>
         <button class="sx-btn" id="btn-new-product"><svg><use href="#plus"/></svg>Novo produto</button>
       </div>
 
@@ -201,7 +196,6 @@
           <button class="sx-tab" data-period="30d" aria-selected="true">30 dias</button>
           <button class="sx-tab" data-period="90d">90 dias</button>
         </div>
-        <span class="sx-badge sx-badge--warning" title="As vendas são simuladas até o Mercado Livre ser conectado"><i class="sx-dot"></i>Vendas de demonstração</span>
         <div class="sx-search" style="max-width:300px"><svg><use href="#search"/></svg><input class="sx-input" id="produtos-search" placeholder="Buscar produto..."></div>
       </div>
 
@@ -279,7 +273,6 @@
     <section id="page-pedidos" class="page">
       <div class="page-head">
         <div><h1 class="sx-title">Pedidos</h1><p class="sx-muted">Dashboard de vendas: logística e financeiro em um só lugar.</p></div>
-        <span class="sx-badge sx-badge--warning" title="Os pedidos são simulados até o Mercado Livre ser conectado"><i class="sx-dot"></i>Pedidos de demonstração</span>
       </div>
 
       <div class="sx-tabs" role="tablist" id="vendas-period-tabs" aria-label="Período" style="margin-bottom:18px">

@@ -101,9 +101,7 @@ function defaultSettings(){
   }};
 }
 
-var CLIENTES = ["Ana Souza","Carlos Mendes","Juliana Rocha","Pedro Almeida","Fernanda Lima","Bruno Castro",
-  "Camila Duarte","Lucas Ferreira","Mariana Costa","Rafael Torres","Beatriz Nunes","Thiago Pereira",
-  "Larissa Ramos","Gustavo Silva","Patrícia Gomes","Diego Martins","Isabela Freitas","André Barros"];
+
 
 var STATUS_LABEL = {concluido:"Concluído", enviado:"Enviado", processando:"Processando", cancelado:"Cancelado"};
 var STATUS_BADGE = {concluido:"success", enviado:"success", processando:"warning", cancelado:"danger"};
@@ -138,51 +136,8 @@ var state = {
   }
 };
 
-function generateOrders(products, todayStr, days){
-  var rand = mulberry32(hashSeed(todayStr));
-  var orders = [];
-  var counter = 1;
-  var activeProducts = products.filter(function(p){ return p.price > 0; });
-  if (!activeProducts.length) return [];
-  var totalWeight = activeProducts.reduce(function(a,p){ return a + (p.weight || 1); }, 0);
-
-  for (var offset = days-1; offset >= 0; offset--){
-    var d = new Date(todayStr + "T00:00:00");
-    d.setDate(d.getDate() - offset);
-    var iso = isoDate(d);
-    var dow = d.getDay();
-    var weekendFactor = (dow===0 || dow===6) ? 1.22 : 1.0;
-    var growth = 0.62 + ((days-1-offset)/(days-1)) * 0.55;
-    var noise = 0.7 + rand()*0.55;
-    var count = Math.max(2, Math.round(6.4 * growth * weekendFactor * noise));
-
-    for (var i=0;i<count;i++){
-      var r = rand()*totalWeight, acc=0, chosen=activeProducts[0];
-      for (var k=0;k<activeProducts.length;k++){ acc += (activeProducts[k].weight || 1); if (r<=acc){ chosen=activeProducts[k]; break; } }
-      var qtyRoll = rand();
-      var qty = qtyRoll<0.7 ? 1 : (qtyRoll<0.92 ? 2 : 3);
-      var statusRoll = rand();
-      var status = statusRoll<0.78 ? "concluido" : statusRoll<0.89 ? "enviado" : statusRoll<0.96 ? "processando" : "cancelado";
-      var hour = 8 + Math.floor(rand()*14);
-      var client = CLIENTES[Math.floor(rand()*CLIENTES.length)];
-      orders.push({
-        id: "sx" + (10000+counter),
-        date: iso,
-        hour: hour,
-        channel: chosen.channel,
-        productId: chosen.id,
-        qty: qty,
-        unitPrice: chosen.price,
-        unitCost: chosen.cost != null ? chosen.cost : null,
-        total: Math.round(chosen.price*qty*100)/100,
-        status: status,
-        client: client
-      });
-      counter++;
-    }
-  }
-  return orders;
-}
+// Pedidos: só os reais. Ficam vazios até os pedidos do Mercado Livre serem integrados.
+function loadOrders(){ return []; }
 
 function productById(id){ return state.products.find(function(p){ return p.id===id; }); }
 function validOrders(list){ return list.filter(function(o){ return o.status !== "cancelado"; }); }
@@ -255,8 +210,8 @@ function renderKPIs(){
 
   var html = cards.map(function(c){
     var deltaOk = isFinite(c.d);
-    var down = deltaOk && c.d < 0;
-    var deltaText = deltaOk ? fmtPct(c.d) + " vs. período anterior" : "sem dados no período anterior";
+    var down = state.orders.length > 0 && deltaOk && c.d < 0;
+    var deltaText = !state.orders.length ? "Nenhuma venda ainda" : (deltaOk ? fmtPct(c.d) + " vs. período anterior" : "sem dados no período anterior");
     return '<div class="sx-card">' +
       '<div class="sx-stat__label">'+escapeHtml(c.label)+'</div>' +
       '<div class="sx-stat__value">'+c.value+'</div>' +
@@ -297,6 +252,10 @@ function renderChart(){
     document.getElementById("chart-caption").textContent = period==="7d" ? "por dia — últimos 7 dias" : "por dia — últimos 30 dias";
   }
 
+  if (!buckets.some(function(b){ return b.value > 0; })){
+    document.getElementById("chart-host").innerHTML = '<div class="empty">Nenhuma venda no período. O faturamento aparece aqui quando os pedidos do Mercado Livre começarem a entrar.</div>';
+    return;
+  }
   var max = Math.max.apply(null, buckets.map(function(b){ return b.value; }).concat([1]));
   var W = 900, H = 220, padL = 8, padR = 8, padB = 26, padT = 10;
   var innerW = W - padL - padR, innerH = H - padT - padB;
@@ -335,7 +294,11 @@ function renderChannelBreakdown(){
   v.forEach(function(o){ totals[o.channel] = (totals[o.channel]||0) + o.total; });
   var grandTotal = Object.keys(totals).reduce(function(a,k){ return a+totals[k]; }, 0);
 
-  var order = Object.keys(totals).sort(function(a,b){ return totals[b]-totals[a]; });
+  if (!grandTotal){
+    document.getElementById("channel-breakdown").innerHTML = '<div class="empty">Nenhuma venda no período.</div>';
+    return;
+  }
+  var order = Object.keys(totals).filter(function(k){ return totals[k] > 0; }).sort(function(a,b){ return totals[b]-totals[a]; });
   var html = order.map(function(k){
     var pct = grandTotal>0 ? (totals[k]/grandTotal*100) : 0;
     return '<div class="channel-row">' +
@@ -409,14 +372,31 @@ function renderPainel(){
   renderRecentOrders();
   renderSideSummary();
   renderMlMini();
+  renderOnboarding();
+}
+function renderOnboarding(){
+  var el = document.getElementById("onboarding");
+  if (!el) return;
+  var steps = [
+    {done: !!(typeof ml !== "undefined" && ml.account), title: "Conecte sua conta do Mercado Livre", desc: "Você autoriza na página do próprio Mercado Livre.", goto: "integracoes", cta: "Conectar"},
+    {done: state.products.length > 0, title: "Escolha produtos do fornecedor", desc: "Na Mineração, clique em + nos produtos que quer vender.", goto: "mineracao", cta: "Abrir Mineração"},
+    {done: state.products.some(function(p){ return p.mlItemId; }), title: "Publique no Mercado Livre", desc: "A publicação direto do Sellex chega em breve.", goto: null, cta: null}
+  ];
+  var doneCount = steps.filter(function(s){ return s.done; }).length;
+  el.innerHTML = '<div class="sx-card__head"><h2 class="sx-card__title">Primeiros passos</h2><span class="sx-badge">'+doneCount+' de '+steps.length+'</span></div>' +
+    '<ol class="onb-list">' + steps.map(function(s){
+      return '<li class="onb-step'+(s.done?' is-done':'')+'"><span class="onb-check" aria-hidden="true">'+(s.done?'<svg><use href="#check"/></svg>':'')+'</span>' +
+        '<div class="onb-text"><b>'+escapeHtml(s.title)+'</b><span>'+escapeHtml(s.desc)+'</span>' +
+        (!s.done && s.goto ? '<a class="sx-btn sx-btn--sm" href="#" data-goto="'+s.goto+'">'+escapeHtml(s.cta)+'</a>' : '') + '</div></li>';
+    }).join("") + '</ol>';
 }
 
 /* ================= produtos: dashboard + grid limpo ================= */
 function statusOfProduct(p){
   if (!p.active) return {label:"Pausado", tone:"danger"};
-  if (p.stock===0) return {label:"Sem estoque", tone:"danger"};
+  if (p.stock===0) return {label:"Sem estoque no fornecedor", tone:"danger"};
   if (p.stock<10) return {label:"Estoque baixo", tone:"warning"};
-  return {label:"Ativo", tone:"success"};
+  return {label:"Em estoque", tone:"success"};
 }
 function salesForProduct(productId, days){
   var os = ordersInRange(0, days).filter(function(o){ return o.productId===productId && o.status!=="cancelado"; });
@@ -478,11 +458,12 @@ function renderProdutosGrid(){
       '<div class="product-card__body">' +
         '<div class="product-card__price"><span class="now">'+fmtBRL(p.price)+'</span><span class="stock">'+fmtInt(p.stock)+' em estoque</span></div>' +
         '<div class="product-card__name" title="'+escapeHtml(p.name)+'">'+escapeHtml(p.name)+'</div>' +
-        '<div class="product-card__chrow"><img src="'+CH_ICON[ch]+'" alt="">'+CHANNELS[ch].name+' · '+escapeHtml(p.category)+'</div>' +
+        '<div class="product-card__chrow">'+escapeHtml(p.category)+(p.sku ? ' · SKU '+escapeHtml(p.sku) : '')+'</div>' +
         (p.cost != null
           ? '<div class="sx-muted" style="font-size:12.5px">Custo '+fmtBRL(p.cost)+' · lucro '+fmtBRL(unitProfit)+' por un. ('+fmtInt(productMarginPct(p))+'%)</div>'
           : '<div class="sx-muted" style="font-size:12.5px">Margem '+fmtInt(productMarginPct(p))+'%</div>') +
-        '<div><span class="sx-badge sx-badge--'+st.tone+'"><i class="sx-dot"></i>'+st.label+'</span></div>' +
+        '<div class="row" style="gap:6px"><span class="sx-badge sx-badge--'+st.tone+'"><i class="sx-dot"></i>'+st.label+'</span>' +
+          (p.mlItemId ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>No Mercado Livre</span>' : '<span class="sx-badge"><i class="sx-dot"></i>Não publicado</span>') + '</div>' +
         '<div class="product-stats">' +
           '<div class="figures"><span class="sx-muted">Vendido no período</span><b>'+fmtInt(s.qty)+' un. · '+fmtBRL(s.revenue)+'</b></div>' +
           '<div class="figures"><span class="sx-muted">Lucro no período</span><b>'+fmtBRL(s.profit)+'</b></div>' +
@@ -567,7 +548,7 @@ function saveProductForm(ev){
     toast("Produto criado.");
   }
   saveJSON(STORE_KEYS.products, state.products);
-  state.orders = generateOrders(state.products, state.today, 90);
+  state.orders = loadOrders();
   closeProductModal();
   renderProdutos();
   renderSideSummary();
@@ -578,7 +559,7 @@ function deleteProduct(id){
   if (!window.confirm('Excluir "'+p.name+'"? Essa ação não pode ser desfeita.')) return;
   state.products = state.products.filter(function(x){ return x.id!==id; });
   saveJSON(STORE_KEYS.products, state.products);
-  state.orders = generateOrders(state.products, state.today, 90);
+  state.orders = loadOrders();
   renderProdutos();
   renderSideSummary();
   toast("Produto excluído.");
@@ -794,7 +775,7 @@ function addFromMining(id){
   var p = productFromCatalog(r);
   state.products.push(p);
   saveJSON(STORE_KEYS.products, state.products);
-  state.orders = generateOrders(state.products, state.today, 90);
+  state.orders = loadOrders();
   renderMining();
   renderSideSummary();
   toast('"'+r.name+'" adicionado aos seus produtos por '+fmtBRL(p.price)+' (custo '+fmtBRL(p.cost)+').');
@@ -814,10 +795,6 @@ function refreshProductsFromCatalog(){
     if (p.category !== r._category){ p.category = r._category; changed = true; }
   });
   return changed;
-}
-function seedProductsFromCatalog(){
-  state.products = catalog.items.filter(function(r){ return r.stock > 0; }).map(productFromCatalog);
-  saveJSON(STORE_KEYS.products, state.products);
 }
 function syncMiningViewButtons(){
   document.getElementById("mining-view-grid").setAttribute("data-active", state.mining.view==="grid");
@@ -874,8 +851,8 @@ function renderVendasKPIs(){
   ];
   document.getElementById("vendas-kpi-grid").innerHTML = cards.map(function(c){
     var deltaOk = isFinite(c.d);
-    var down = deltaOk && (c.invert ? c.d > 0 : c.d < 0);
-    var deltaText = c.sub ? c.sub : (deltaOk ? fmtPct(c.d) + " vs. período anterior" : "sem dados no período anterior");
+    var down = state.orders.length > 0 && deltaOk && (c.invert ? c.d > 0 : c.d < 0);
+    var deltaText = !state.orders.length ? "Nenhuma venda ainda" : c.sub ? c.sub : (deltaOk ? fmtPct(c.d) + " vs. período anterior" : "sem dados no período anterior");
     return '<div class="sx-card"><div class="sx-stat__label">'+escapeHtml(c.label)+'</div>' +
       '<div class="sx-stat__value">'+c.value+'</div>' +
       '<div class="sx-stat__delta'+(down?' sx-stat__delta--down':'')+'">'+deltaText+'</div>' +
@@ -956,7 +933,7 @@ function renderPedidos(){
     '</tr>';
   }).join("");
 
-  document.querySelector("#pedidos-table tbody").innerHTML = rows || '<tr><td colspan="6" class="empty">Nenhum pedido encontrado.</td></tr>';
+  document.querySelector("#pedidos-table tbody").innerHTML = rows || '<tr><td colspan="6" class="empty">'+(state.orders.length ? 'Nenhum pedido encontrado com esses filtros.' : 'Nenhum pedido ainda. Os pedidos do Mercado Livre vão aparecer aqui.')+'</td></tr>';
   document.getElementById("pedidos-count").textContent = total + (total===1?" pedido":" pedidos") + (total>150 ? " (mostrando os 150 mais recentes)" : "");
 }
 function changeOrderStatus(orderId, newStatus){
@@ -1133,6 +1110,7 @@ function refreshMlStatus(){
     ml.account = res.data || null;
     renderIntegracoes();
     renderMlMini();
+    renderOnboarding();
   });
 }
 function functionErrorCode(error){
@@ -1256,7 +1234,7 @@ function saveConfig(ev){
   if (catalog.loaded && oldTier !== state.settings.c7Tier){
     refreshProductsFromCatalog();
     saveJSON(STORE_KEYS.products, state.products);
-    state.orders = generateOrders(state.products, state.today, 90);
+    state.orders = loadOrders();
   }
   toast("Configurações salvas.");
 }
@@ -1279,6 +1257,7 @@ function goToPage(name, keepScroll){
   document.querySelectorAll(".sx-nav__item[data-page]").forEach(function(a){
     if (a.getAttribute("data-page")===name) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
   });
+  if (name==="painel") renderPainel();
   if (name==="produtos") renderProdutos();
   if (name==="mineracao") renderMining();
   if (name==="pedidos"){ renderVendasDashboard(); renderPedidos(); }
@@ -1416,15 +1395,15 @@ function init(){
 
 // produtos e configurações ficam separados por conta (cada login tem os seus)
 function loadUserState(uid){
-  STORE_KEYS.products = "sx_products_v2_c7:" + uid;
-  STORE_KEYS.settings = "sx_settings_v2:" + uid;
+  STORE_KEYS.products = "sx_products_v3:" + uid;
+  STORE_KEYS.settings = "sx_settings_v3:" + uid;
   var savedProducts = loadJSON(STORE_KEYS.products, null);
   state.products = Array.isArray(savedProducts) ? savedProducts : [];
   state.settings = loadJSON(STORE_KEYS.settings, null) || defaultSettings();
   if (!state.settings.lastSync) state.settings.lastSync = defaultSettings().lastSync;
   if (!state.settings.c7Tier) state.settings.c7Tier = "DROPSHIPPING";
   saveJSON(STORE_KEYS.settings, state.settings);
-  state.orders = generateOrders(state.products, state.today, 90);
+  state.orders = loadOrders();
 }
 function currentPage(){
   var el = document.querySelector(".page.is-active");
@@ -1434,14 +1413,11 @@ function startCatalog(){
   renderMining();
   var ready = catalog.loaded ? Promise.resolve() : loadCatalog();
   ready.then(function(){
-    var seeded = false;
-    if (loadJSON(STORE_KEYS.products, null) === null){ seedProductsFromCatalog(); seeded = true; }
-    else if (refreshProductsFromCatalog()) saveJSON(STORE_KEYS.products, state.products);
-    state.orders = generateOrders(state.products, state.today, 90);
+    if (refreshProductsFromCatalog()) saveJSON(STORE_KEYS.products, state.products);
+    state.orders = loadOrders();
     renderPainel();
     var pg = currentPage();
     if (pg !== "painel") goToPage(pg, true);
-    if (seeded) toast(fmtInt(state.products.length) + " produtos com estoque do C7 Drop foram adicionados aos seus produtos.");
   }).catch(function(){
     renderMining();
     renderProdutos();
