@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>Sellex — Painel do vendedor</title>
+<link rel="stylesheet" href="css/sellex-ui.css">
+<link rel="stylesheet" href="css/app-extra.css">
+<style>body{background:var(--sx-bg)}</style>
+</head>
+<body class="sx">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M12 3 3.5 7.5v9L12 21l8.5-4.5v-9zM3.5 7.5 12 12l8.5-4.5M12 12v9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="truck" viewBox="0 0 24 24"><path d="M2 6h11v10H2zM13 10h4l4 3v3h-8M6.5 19a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6ZM17 19a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="logout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="store" viewBox="0 0 24 24"><path d="M4 9 5.5 4h13L20 9M4 9h16v11H4zM4 9a2.7 2.7 0 0 0 5.3 0 2.7 2.7 0 0 0 5.4 0A2.7 2.7 0 0 0 20 9M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="settings" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="14" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="8" cy="17" r="2.3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="m20 20-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4zM10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="edit" viewBox="0 0 24 24"><path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17v3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M13.5 7.5l3 3" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.9-5.4M20 12a8 8 0 0 1-13.9 5.4M17 4v4h-4M7 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor" stroke="currentColor" stroke-width="1"/></symbol>
+  <symbol id="filter" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.4V19l-3.6 1.8v-8.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="crown" viewBox="0 0 24 24"><path d="m3 8 4 3 5-6 5 6 4-3-2 11H5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="shield-check" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="gem" viewBox="0 0 24 24"><path d="M4 8.5 8 4h8l4 4.5L12 21z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M4 8.5h16M9 8.5l3 12.5 3-12.5M9.5 4 12 8.5 14.5 4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></symbol>
+
+  <!-- ilustrações de produto (originais, estilo linha) -->
+  <symbol id="pi-fone" viewBox="0 0 48 48"><path d="M8 26v-2a16 16 0 0 1 32 0v2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><rect x="6" y="24" width="9" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="33" y="24" width="9" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+  <symbol id="pi-headsetgamer" viewBox="0 0 48 48"><path d="M8 26v-2a16 16 0 0 1 32 0v2" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><rect x="6" y="24" width="9" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="33" y="24" width="9" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.4"/><path d="M33 33c5 0 9 3 9 8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="pi-caixasom" viewBox="0 0 48 48"><rect x="14" y="5" width="20" height="38" rx="7" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="24" cy="15" r="3.4" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="24" cy="30" r="7.5" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+  <symbol id="pi-carregador" viewBox="0 0 48 48"><path d="M17 5v10M31 5v10M12 15h24v10a12 12 0 0 1-24 0z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M24 37v8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="pi-ventilador" viewBox="0 0 48 48"><circle cx="24" cy="24" r="4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M24 24c0-9 6-13 13-11-2 9-6 13-13 11zM24 24c0 9-6 13-13 11 2-9 6-13 13-11zM24 24c9 0 13-6 11-13-9 2-13 6-11 13zM24 24c-9 0-13 6-11 13 9-2 13-6 11-13z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-difusor" viewBox="0 0 48 48"><path d="M17 44h14l-2-25H19z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/><path d="M20 4c0 4-4 4-4 9M28 4c0 4 4 4 4 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="pi-pincel" viewBox="0 0 48 48"><path d="M30 6 42 18 25 35l-9-9z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M16 26 7 39l4 4 13-9" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-secador" viewBox="0 0 48 48"><path d="M9 20a14 14 0 0 1 28 0c0 4-3 6-7 6H16c-4 0-7-2-7-6z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M19 26v11a4 4 0 0 1-4 4h-3" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-round-brush" viewBox="0 0 48 48"><rect x="15" y="5" width="18" height="17" rx="8.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M17 9h14M17 13h14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M24 22v18M17 42h14" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-straightener" viewBox="0 0 48 48"><rect x="9" y="19" width="30" height="9" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M14 28v11M34 28v11" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-watch-smart" viewBox="0 0 48 48"><rect x="14" y="14" width="20" height="20" rx="5.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M18 14V7h12v7M18 34v7h12v-7" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M24 20v5l4 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-watch-analog" viewBox="0 0 48 48"><circle cx="24" cy="24" r="13" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M24 24V15M24 24l6 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20 5h8M20 43h8" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-oculos" viewBox="0 0 48 48"><circle cx="14" cy="26" r="8.5" fill="none" stroke="currentColor" stroke-width="2.3"/><circle cx="34" cy="26" r="8.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M22.5 24h3M5 22l4-4M43 22l-4-4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="pi-mochila" viewBox="0 0 48 48"><path d="M14 20a10 10 0 0 1 20 0v18a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M18 20v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="2.3"/><rect x="19" y="27" width="10" height="8" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="pi-garrafa" viewBox="0 0 48 48"><path d="M20 5h8v6h-8z" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M17 11h14l2 7v22a4 4 0 0 1-4 4H19a4 4 0 0 1-4-4V18z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-luminaria" viewBox="0 0 48 48"><path d="M13 9h22l-7 17H20z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M24 26v14M16 44h16" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-suportecelular" viewBox="0 0 48 48"><rect x="15" y="7" width="18" height="30" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M10 41h28M24 37v4" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-airfryer" viewBox="0 0 48 48"><path d="M13 18c0-6 5-11 11-11s11 5 11 11" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><rect x="9" y="18" width="30" height="22" rx="5" fill="none" stroke="currentColor" stroke-width="2.3"/><circle cx="24" cy="29" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="pi-organizador" viewBox="0 0 48 48"><rect x="7" y="9" width="34" height="30" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M7 24h34M20 9v30M33 9v13" fill="none" stroke="currentColor" stroke-width="2"/></symbol>
+  <symbol id="pi-camera" viewBox="0 0 48 48"><rect x="7" y="17" width="24" height="15" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><circle cx="32" cy="24.5" r="4.5" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M7 21 1 17v15l6-4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-powerbank" viewBox="0 0 48 48"><rect x="14" y="5" width="20" height="38" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M27 13l-7 11h7l-7 11" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-caneca" viewBox="0 0 48 48"><path d="M11 11h21v21a6.5 6.5 0 0 1-6.5 6.5h-8A6.5 6.5 0 0 1 11 32z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M32 18h4.5a5.5 5.5 0 0 1 0 11H32" fill="none" stroke="currentColor" stroke-width="2.1"/></symbol>
+  <symbol id="pi-cinto" viewBox="0 0 48 48"><rect x="5" y="20" width="38" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="2.3"/><rect x="19" y="18" width="10" height="12" rx="2.4" fill="none" stroke="currentColor" stroke-width="2.1"/><circle cx="24" cy="24" r="1.6" fill="currentColor"/></symbol>
+  <symbol id="pi-skincare" viewBox="0 0 48 48"><rect x="13" y="16" width="22" height="26" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><rect x="16" y="8" width="16" height="9" rx="3" fill="none" stroke="currentColor" stroke-width="2.1"/></symbol>
+  <symbol id="pi-smartphone" viewBox="0 0 48 48"><rect x="15" y="5" width="18" height="38" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M21 39h6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-notebook" viewBox="0 0 48 48"><rect x="10" y="9" width="28" height="19" rx="2.3" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M5 35h38l-4 5H9z" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-panela" viewBox="0 0 48 48"><circle cx="21" cy="27" r="13" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M34 23h9" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M12 18h18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="pi-teclado" viewBox="0 0 48 48"><rect x="6" y="15" width="36" height="20" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M13 23h.01M20 23h.01M27 23h.01M34 23h.01M13 30h22" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-mouse" viewBox="0 0 48 48"><path d="M24 7c9 0 13 7 13 15v9a13 13 0 0 1-26 0v-9c0-8 4-15 13-15z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M24 7v13M18 20h12" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="pi-box" viewBox="0 0 48 48"><path d="M24 6 7 15v18l17 9 17-9V15z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M7 15l17 9 17-9M24 24v18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linejoin="round"/></symbol>
+  <symbol id="pi-vacuum" viewBox="0 0 48 48"><rect x="17" y="6" width="14" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M24 26v7" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M12 42a12 12 0 0 1 24 0" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/><path d="M19 6V4M29 6V4" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="pi-scale" viewBox="0 0 48 48"><rect x="5" y="26" width="38" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M5 26 12 8h24l7 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/><path d="M20 33h8" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-toolbox" viewBox="0 0 48 48"><rect x="5" y="18" width="38" height="21" rx="4" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M16 18v-6a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M5 27h38" fill="none" stroke="currentColor" stroke-width="2.1"/></symbol>
+  <symbol id="pi-shoe" viewBox="0 0 48 48"><path d="M4 32c0-4 2-6 5-8l9-6c2 3 5 4 8 4h7a6 6 0 0 1 6 6v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M18 18v6" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></symbol>
+  <symbol id="pi-bag" viewBox="0 0 48 48"><path d="M10 16h28l-2 26H12z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M18 16v-4a6 6 0 0 1 12 0v4" fill="none" stroke="currentColor" stroke-width="2.3"/></symbol>
+  <symbol id="pi-perfume" viewBox="0 0 48 48"><path d="M18 18h12v21a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M21 18v-6h6v6" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M19 8h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="pi-jar" viewBox="0 0 48 48"><path d="M12 18h24v18a6 6 0 0 1-6 6H18a6 6 0 0 1-6-6z" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linejoin="round"/><path d="M15 18v-4a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v4" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+  <symbol id="pi-tablet" viewBox="0 0 48 48"><rect x="9" y="4" width="30" height="40" rx="4.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M21 39h6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-router" viewBox="0 0 48 48"><rect x="6" y="20" width="36" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M16 20v-4a8 8 0 0 1 16 0v4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15 27h.01M24 27h.01M33 27h.01" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+  <symbol id="pi-printer" viewBox="0 0 48 48"><rect x="9" y="16" width="30" height="16" rx="3.5" fill="none" stroke="currentColor" stroke-width="2.3"/><path d="M14 16V8h20v8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M14 32v8h20v-8" fill="none" stroke="currentColor" stroke-width="2.2"/></symbol>
+</defs></svg>
+
+<div class="sx-app sx-app--top">
+  <header class="sx-header">
+    <a class="sx-header__logo" href="#"><img src="assets/sellex-logo.png" alt="">Sellex</a>
+    <nav class="sx-nav" aria-label="Menu principal">
+      <a class="sx-nav__item" href="#" data-page="painel" aria-current="page"><svg><use href="#home"/></svg><span>Painel</span></a>
+      <a class="sx-nav__item" href="#" data-page="produtos"><svg><use href="#box"/></svg><span>Produtos</span></a>
+      <a class="sx-nav__item" href="#" data-page="mineracao"><svg><use href="#gem"/></svg><span>Mineração</span></a>
+      <a class="sx-nav__item" href="#" data-page="pedidos"><svg><use href="#truck"/></svg><span>Pedidos</span></a>
+      <a class="sx-nav__item" href="#" data-page="integracoes"><svg><use href="#plug"/></svg><span>Integrações</span></a>
+      <a class="sx-nav__item" href="#" data-page="config"><svg><use href="#settings"/></svg><span>Configurações</span></a>
+    </nav>
+    <div class="sx-header__actions">
+      <button class="sx-btn sx-btn--ghost sx-btn--icon" aria-label="Notificações"><svg><use href="#bell"/></svg></button>
+      <button class="sx-avatar" id="header-avatar" type="button" data-goto="config" title="Minha conta" style="border:0;cursor:pointer;font:inherit">··</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ===================== PAINEL ===================== -->
+    <section id="page-painel" class="page is-active">
+      <div class="grid g-main">
+        <div class="stack">
+          <section class="sx-banner">
+            <span class="sx-badge" id="today-label">—</span>
+            <h1 class="sx-title" style="font-size:40px;margin:14px 0 6px">Olá, <span class="sx-grad" id="greeting-name">lojista</span>!</h1>
+            <p class="sx-muted" style="margin:0 0 22px;max-width:52ch">Acompanhe o desempenho das suas vendas em tempo real e veja como cada canal está performando.</p>
+            <div class="row">
+              <div class="sx-tabs" role="tablist" id="period-tabs" aria-label="Período">
+                <button class="sx-tab" data-period="hoje">Hoje</button>
+                <button class="sx-tab" data-period="7d" aria-selected="true">7 dias</button>
+                <button class="sx-tab" data-period="30d">30 dias</button>
+                <button class="sx-tab" data-period="90d">90 dias</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="grid g-4" id="kpi-grid"></div>
+
+          <div class="sx-card">
+            <div class="sx-card__head">
+              <h2 class="sx-card__title">Faturamento no período</h2>
+              <span class="sx-muted" id="chart-caption" style="font-size:12.5px"></span>
+            </div>
+            <div class="chart-wrap" id="chart-host"></div>
+          </div>
+
+          <div class="grid g-2">
+            <div class="sx-card">
+              <div class="sx-card__head"><h2 class="sx-card__title">Vendas por canal</h2></div>
+              <div class="stack" id="channel-breakdown"></div>
+            </div>
+            <div class="sx-card">
+              <div class="sx-card__head"><h2 class="sx-card__title">Produtos mais vendidos</h2></div>
+              <div class="sx-table-wrap">
+                <table class="sx-table" id="top-products-table">
+                  <thead><tr><th>Produto</th><th>Qtd.</th><th>Receita</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div class="sx-card">
+            <div class="sx-card__head">
+              <h2 class="sx-card__title">Pedidos recentes</h2>
+              <a class="sx-btn sx-btn--ghost sx-btn--sm" href="#" data-goto="pedidos">Ver todos<svg><use href="#arrow"/></svg></a>
+            </div>
+            <div class="sx-table-wrap">
+              <table class="sx-table" id="recent-orders-table">
+                <thead><tr><th>Produto</th><th>Cliente</th><th>Canal</th><th>Valor</th><th>Status</th><th>Quando</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="stack" style="align-content:start">
+          <div class="sx-card sx-card--hl">
+            <div class="sx-card__head"><h2 class="sx-card__title">Meu perfil</h2></div>
+            <div class="row"><span class="sx-avatar" id="profile-avatar" style="width:56px;height:56px;font-size:18px">··</span>
+              <div style="min-width:0"><div style="font-size:19px;font-weight:500" id="profile-name">—</div><div class="sx-muted" style="font-size:13px;word-break:break-all" id="profile-email"></div></div>
+            </div>
+            <div class="ml-mini" id="ml-mini"></div>
+          </div>
+
+          <div class="sx-card">
+            <div class="sx-card__head"><h2 class="sx-card__title">Resumo do catálogo</h2></div>
+            <div class="stack">
+              <div class="row between"><span class="sx-muted">Produtos ativos</span><b id="side-active-products">—</b></div>
+              <div class="row between"><span class="sx-muted">Estoque baixo</span><b id="side-low-stock" style="color:var(--sx-yellow)">—</b></div>
+              <div class="row between"><span class="sx-muted">Sem estoque</span><b id="side-out-stock" style="color:var(--sx-red)">—</b></div>
+              <a class="sx-btn sx-btn--block sx-btn--sm" href="#" data-goto="produtos">Gerenciar produtos</a>
+            </div>
+          </div>
+
+          <div class="sx-card sx-card--glow">
+            <span class="sx-eyebrow">Dica rápida</span>
+            <h3 class="sx-title" style="font-size:22px;margin:8px 0 6px">Fique de olho no <span class="sx-grad">estoque baixo</span></h3>
+            <p class="sx-muted" style="font-size:14px;margin:0 0 18px">Produtos parados por falta de estoque perdem posição nos canais.</p>
+            <a class="sx-btn sx-btn--block sx-btn--shine" href="#" data-goto="produtos">Ver produtos</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PRODUTOS ===================== -->
+    <section id="page-produtos" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Produtos</h1><p class="sx-muted">Seus produtos do fornecedor C7 Drop, com custo, estoque e lucro de cada um.</p></div>
+        <button class="sx-btn" id="btn-new-product"><svg><use href="#plus"/></svg>Novo produto</button>
+      </div>
+
+      <div class="grid g-4" id="produtos-kpi-grid" style="margin-bottom:18px"></div>
+
+      <div class="row between" style="margin-bottom:16px;gap:14px">
+        <div class="sx-tabs" role="tablist" id="produtos-period-tabs" aria-label="Período">
+          <button class="sx-tab" data-period="hoje">Hoje</button>
+          <button class="sx-tab" data-period="7d">7 dias</button>
+          <button class="sx-tab" data-period="30d" aria-selected="true">30 dias</button>
+          <button class="sx-tab" data-period="90d">90 dias</button>
+        </div>
+        <span class="sx-badge sx-badge--warning" title="As vendas são simuladas até o Mercado Livre ser conectado"><i class="sx-dot"></i>Vendas de demonstração</span>
+        <div class="sx-search" style="max-width:300px"><svg><use href="#search"/></svg><input class="sx-input" id="produtos-search" placeholder="Buscar produto..."></div>
+      </div>
+
+      <div class="mining-grid" id="produtos-grid"></div>
+    </section>
+
+    <!-- ===================== MINERAÇÃO DE PRODUTOS ===================== -->
+    <section id="page-mineracao" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Mineração de produtos</h1><p class="sx-muted">Catálogo do fornecedor C7 Drop, atualizado automaticamente. Importe para vender.</p></div>
+        <span class="sx-badge" id="catalog-status"><i class="sx-dot"></i>Carregando catálogo…</span>
+      </div>
+
+      <div class="sx-search" style="max-width:620px;margin-bottom:18px">
+        <svg><use href="#search"/></svg><input class="sx-input" id="mining-search" placeholder="Buscar por nome, SKU ou código de barras...">
+      </div>
+
+      <div class="mining-layout">
+        <aside class="mining-filters">
+          <div class="sx-card">
+            <div class="sx-card__head" style="margin-bottom:6px"><h2 class="sx-card__title">Filtros</h2><svg style="width:16px;height:16px;color:var(--sx-muted)"><use href="#filter"/></svg></div>
+
+            <div class="filter-group">
+              <h3>Disponibilidade</h3>
+              <label class="filter-check"><input type="checkbox" data-mfilter="inStock" checked>Só com estoque</label>
+              <label class="filter-check"><input type="checkbox" data-mfilter="withGtin">Com código de barras (GTIN)</label>
+              <label class="filter-check"><input type="checkbox" data-mfilter="notImported">Ainda não importados</label>
+            </div>
+
+            <div class="filter-group">
+              <h3>Categoria</h3>
+              <select class="sx-select" id="mining-category"><option value="">Todas as categorias</option></select>
+            </div>
+
+            <div class="filter-group">
+              <h3>Custo no fornecedor</h3>
+              <div class="price-inputs">
+                <input type="number" id="mining-price-min" placeholder="Mín.">
+                <input type="number" id="mining-price-max" placeholder="Máx.">
+              </div>
+              <button class="price-preset" data-preset="0-30">Até R$ 30</button>
+              <button class="price-preset" data-preset="30-80">R$ 30 – R$ 80</button>
+              <button class="price-preset" data-preset="80-200">R$ 80 – R$ 200</button>
+              <button class="price-preset" data-preset="200-99999">Acima de R$ 200</button>
+            </div>
+
+            <button class="sx-btn sx-btn--ghost sx-btn--block sx-btn--sm" id="mining-clear" type="button">Limpar filtros</button>
+          </div>
+        </aside>
+
+        <div>
+          <div class="mining-toolbar">
+            <span class="count" id="mining-count"></span>
+            <div class="spacer"></div>
+            <select class="sx-select" id="mining-sort" style="width:auto">
+              <option value="recent">Mais recentes</option>
+              <option value="price-asc">Menor custo</option>
+              <option value="price-desc">Maior custo</option>
+              <option value="stock">Mais estoque</option>
+              <option value="name">Nome (A–Z)</option>
+            </select>
+            <div class="row" style="gap:4px">
+              <button class="icon-btn" id="mining-view-grid" aria-label="Ver em grade" data-active="true"><svg><use href="#grid"/></svg></button>
+              <button class="icon-btn" id="mining-view-list" aria-label="Ver em lista"><svg><use href="#list"/></svg></button>
+            </div>
+          </div>
+          <div class="chip-row" id="mining-chips"></div>
+          <div class="mining-grid" id="mining-grid"></div>
+          <div style="text-align:center;margin-top:18px"><button class="sx-btn sx-btn--ghost" id="mining-more" type="button" style="display:none">Carregar mais</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== PEDIDOS ===================== -->
+    <section id="page-pedidos" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Pedidos</h1><p class="sx-muted">Dashboard de vendas: logística e financeiro em um só lugar.</p></div>
+        <span class="sx-badge sx-badge--warning" title="Os pedidos são simulados até o Mercado Livre ser conectado"><i class="sx-dot"></i>Pedidos de demonstração</span>
+      </div>
+
+      <div class="sx-tabs" role="tablist" id="vendas-period-tabs" aria-label="Período" style="margin-bottom:18px">
+        <button class="sx-tab" data-period="hoje">Hoje</button>
+        <button class="sx-tab" data-period="7d">7 dias</button>
+        <button class="sx-tab" data-period="30d" aria-selected="true">30 dias</button>
+        <button class="sx-tab" data-period="90d">90 dias</button>
+      </div>
+
+      <div class="grid g-5" id="vendas-kpi-grid" style="margin-bottom:18px"></div>
+
+      <div class="grid g-2" style="margin-bottom:18px">
+        <div class="sx-card">
+          <div class="sx-card__head"><h2 class="sx-card__title">Status dos pedidos</h2></div>
+          <div class="stack" id="pedidos-status-breakdown"></div>
+        </div>
+        <div class="sx-card">
+          <div class="sx-card__head"><h2 class="sx-card__title">Pedidos por canal</h2></div>
+          <div class="stack" id="pedidos-channel-breakdown"></div>
+        </div>
+      </div>
+
+      <div class="sx-card">
+        <div class="sx-card__head">
+          <h2 class="sx-card__title">Todos os pedidos</h2>
+          <span class="sx-muted" id="pedidos-count" style="font-size:12.5px"></span>
+        </div>
+        <div class="row" style="margin-bottom:16px;gap:10px;flex-wrap:wrap">
+          <div class="sx-search" style="flex:1;max-width:320px"><svg><use href="#search"/></svg><input class="sx-input" id="pedidos-search" placeholder="Cliente ou produto..."></div>
+          <select class="sx-select" id="pedidos-status" style="width:auto">
+            <option value="todos">Todos os status</option>
+            <option value="concluido">Concluído</option>
+            <option value="enviado">Enviado</option>
+            <option value="processando">Processando</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+          <select class="sx-select" id="pedidos-channel" style="width:auto">
+            <option value="todos">Todos os canais</option>
+            <option value="shopee">Shopee</option>
+            <option value="ml">Mercado Livre</option>
+            <option value="amazon">Amazon</option>
+            <option value="shein">Shein</option>
+          </select>
+        </div>
+        <div class="sx-table-wrap">
+          <table class="sx-table" id="pedidos-table">
+            <thead><tr><th>Data</th><th>Produto</th><th>Cliente</th><th>Canal</th><th>Valor</th><th>Status</th></tr></thead>
+            <tbody></tbody>
+          </table>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== LOJAS ===================== -->
+    <section id="page-integracoes" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Integrações</h1><p class="sx-muted">Conecte suas contas de marketplace e seu fornecedor. Cada conexão é só sua.</p></div>
+      </div>
+      <h2 class="int-section">Marketplaces</h2>
+      <div class="int-grid" id="int-marketplaces"></div>
+      <h2 class="int-section">Fornecedores</h2>
+      <div class="int-grid" id="int-suppliers"></div>
+    </section>
+
+    <!-- ===================== CONFIGURAÇÕES ===================== -->
+    <section id="page-config" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Configurações</h1><p class="sx-muted">Ajustes rápidos para automatizar a operação.</p></div>
+      </div>
+      <div class="sx-card" style="max-width:520px;margin-bottom:18px">
+        <div class="sx-card__head"><h2 class="sx-card__title">Minha conta</h2></div>
+        <div class="row between" style="gap:12px">
+          <div style="min-width:0"><div id="account-name" style="font-weight:500">—</div><div class="sx-muted" id="account-email" style="font-size:13px;word-break:break-all"></div></div>
+          <button class="sx-btn sx-btn--ghost sx-btn--sm" id="btn-logout" type="button"><svg><use href="#logout"/></svg>Sair</button>
+        </div>
+      </div>
+      <div class="sx-card" style="max-width:520px">
+        <form id="config-form" class="stack">
+          <label class="row between"><span>Pausar anúncio sem estoque</span><input type="checkbox" class="sx-switch" id="cfg-pause"></label>
+          <label class="row between"><span>Reajuste automático de preço</span><input type="checkbox" class="sx-switch" id="cfg-autoprice"></label>
+          <label class="row between"><span>Notificar por e-mail</span><input type="checkbox" class="sx-switch" id="cfg-notify"></label>
+          <div><label class="sx-label" for="cfg-margin">Margem padrão (%)</label><input id="cfg-margin" class="sx-input" type="number" min="0" max="85" step="1"><p class="sx-muted" style="font-size:12.5px;margin:6px 0 0">Usada para sugerir o preço de venda: custo ÷ (1 − margem).</p></div>
+          <div><label class="sx-label" for="cfg-tier">Sua faixa de preço no C7 Drop</label>
+            <select class="sx-select" id="cfg-tier">
+              <option value="DROPSHIPPING">Dropshipping</option>
+              <option value="ATACADO">Atacado</option>
+              <option value="GRUPO_VIP">Grupo VIP</option>
+            </select>
+          </div>
+          <button class="sx-btn sx-btn--block" type="submit">Salvar alterações</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===================== MODAL PRODUTO ===================== -->
+<div class="modal-overlay" id="product-modal">
+  <div class="sx-card modal">
+    <div class="modal-head">
+      <h2 id="modal-title">Novo produto</h2>
+      <button class="modal-close" id="modal-close" aria-label="Fechar" type="button"><svg><use href="#x"/></svg></button>
+    </div>
+    <form id="product-form" class="stack">
+      <div><label class="sx-label" for="f-name">Nome do produto</label><input class="sx-input" id="f-name" required></div>
+      <div class="field-row">
+        <div><label class="sx-label" for="f-icon">Ícone</label><select class="sx-select" id="f-icon"></select></div>
+        <div><label class="sx-label" for="f-channel">Canal</label>
+          <select class="sx-select" id="f-channel">
+            <option value="shopee">Shopee</option>
+            <option value="ml">Mercado Livre</option>
+            <option value="amazon">Amazon</option>
+            <option value="shein">Shein</option>
+          </select>
+        </div>
+      </div>
+      <div><label class="sx-label" for="f-category">Categoria</label><input class="sx-input" id="f-category"></div>
+      <div class="field-row">
+        <div><label class="sx-label" for="f-price">Preço (R$)</label><input class="sx-input" id="f-price" type="number" min="0" step="0.01" required></div>
+        <div><label class="sx-label" for="f-stock">Estoque</label><input class="sx-input" id="f-stock" type="number" min="0" step="1" required></div>
+      </div>
+      <div><label class="sx-label" for="f-margin">Margem de lucro (%)</label><input class="sx-input" id="f-margin" type="number" min="0" max="95" step="1"></div>
+      <p class="sx-muted" id="f-cost-hint" style="font-size:12.5px;margin:-6px 0 0;display:none"></p>
+      <label class="row between"><span>Anúncio ativo</span><input type="checkbox" class="sx-switch" id="f-active" checked></label>
+      <button class="sx-btn sx-btn--block" type="submit">Salvar produto</button>
+    </form>
+  </div>
+</div>
+
+<div class="toast-host" id="toast-host"></div>
+
+<!-- ===================== LOGIN ===================== -->
+<div class="auth-gate" id="auth-gate" hidden>
+  <div class="sx-card auth-card">
+    <div class="auth-brand"><img src="assets/sellex-logo.png" alt="">Sellex</div>
+    <h1 class="sx-title auth-title" id="auth-title">Entrar</h1>
+    <p class="sx-muted auth-sub" id="auth-sub">Acesse seu painel de vendas.</p>
+    <div class="sx-tabs auth-tabs" role="tablist" id="auth-tabs">
+      <button class="sx-tab" type="button" data-auth-mode="login" aria-selected="true">Entrar</button>
+      <button class="sx-tab" type="button" data-auth-mode="signup">Criar conta</button>
+    </div>
+    <form id="auth-form" class="stack" novalidate>
+      <div id="auth-name-row" hidden><label class="sx-label" for="auth-name">Seu nome</label><input class="sx-input" id="auth-name" autocomplete="name"></div>
+      <div><label class="sx-label" for="auth-email">E-mail</label><input class="sx-input" id="auth-email" type="email" autocomplete="email" required></div>
+      <div><label class="sx-label" for="auth-password">Senha</label><input class="sx-input" id="auth-password" type="password" autocomplete="current-password" minlength="6" required></div>
+      <p class="auth-msg" id="auth-msg" role="status" hidden></p>
+      <button class="sx-btn sx-btn--block" type="submit" id="auth-submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
