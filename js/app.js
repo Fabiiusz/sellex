@@ -1904,7 +1904,7 @@ function renderIntegracoes(){
     return '<div class="sx-card int-card">' +
       '<div class="int-head"><img class="int-logo" src="'+CH_ICON[c[0]]+'" alt=""><div class="int-title"><div class="int-name">'+c[1]+'</div><span class="sx-badge"><i class="sx-dot"></i>Não conectado</span></div></div>' +
       '<p class="int-desc"><span class="int-avail">Já disponível para integração.</span> Conecte sua conta da '+c[1]+' para publicar seus produtos e receber os pedidos aqui.</p>' +
-      '<div class="int-actions"><button class="sx-btn" type="button" data-int="other" data-int-name="'+c[1]+'"><svg><use href="#plug"/></svg>Conectar '+c[1]+'</button></div>' +
+      '<div class="int-actions"><button class="sx-btn" type="button" data-int="other" data-int-key="'+c[0]+'" data-int-name="'+c[1]+'"><svg><use href="#plug"/></svg>Conectar '+c[1]+'</button></div>' +
     '</div>';
   }).join("");
   host.innerHTML =
@@ -1954,6 +1954,77 @@ function flashCopied(btn){
   var span = btn.querySelector("span"), old = span.textContent;
   btn.classList.add("is-done"); span.textContent = "Copiado";
   setTimeout(function(){ btn.classList.remove("is-done"); span.textContent = old; }, 1600);
+}
+
+/* ---------- popup com QR code para conectar marketplace (SIMULADO) ---------- */
+var QR_LOADING_MS = 2000, QR_TTL_S = 120;
+var qrState = { key: null, name: null, timer: null, loadTimer: null, left: 0 };
+function qrSvg(text){
+  if (typeof window.qrcode !== "function") return null;
+  var q = window.qrcode(0, "M");
+  q.addData(text); q.make();
+  var n = q.getModuleCount(), quiet = 2, size = n + quiet * 2, d = "";
+  for (var r = 0; r < n; r++) for (var c = 0; c < n; c++) if (q.isDark(r, c)) d += "M" + (c + quiet) + " " + (r + quiet) + "h1v1h-1z";
+  return '<svg viewBox="0 0 '+size+' '+size+'" shape-rendering="crispEdges" role="img" aria-label="QR code"><rect width="'+size+'" height="'+size+'" fill="#fff"/><path d="'+d+'" fill="#06070D"/></svg>';
+}
+function qrLink(key){
+  var token = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  var base = location.protocol === "file:" ? "https://fabiiusz.github.io/sellex/" : location.origin + location.pathname;
+  return base + "?connect=" + encodeURIComponent(key) + "&code=" + token;
+}
+function openQrModal(key, name){
+  qrState.key = key; qrState.name = name;
+  document.getElementById("qr-logo").src = CH_ICON[key] || "";
+  document.getElementById("qr-title").textContent = name;
+  document.getElementById("qr-steps").innerHTML =
+    '<li>Abra a câmera do seu celular</li>' +
+    '<li>Aponte para o QR code acima</li>' +
+    '<li>Entre na sua conta da '+escapeHtml(name)+' e autorize o Sellex</li>';
+  document.getElementById("qr-modal").classList.add("is-open");
+  qrGenerate();
+}
+function qrGenerate(){
+  clearInterval(qrState.timer); clearTimeout(qrState.loadTimer);
+  var stage = document.getElementById("qr-stage");
+  stage.className = "qr-stage is-loading";
+  stage.innerHTML = '<div class="qr-skeleton"><span class="qr-spin"></span></div><p>Gerando QR code seguro…</p>';
+  document.getElementById("qr-foot").innerHTML = "";
+  qrState.loadTimer = setTimeout(function(){
+    var svg = qrSvg(qrLink(qrState.key));
+    stage.className = "qr-stage is-ready";
+    stage.innerHTML = svg ? '<div class="qr-code">'+svg+'<img class="qr-badge" src="'+(CH_ICON[qrState.key]||"")+'" alt=""></div>'
+                          : '<p class="int-note">Não consegui gerar o QR code agora.</p>';
+    qrState.left = QR_TTL_S;
+    qrTick();
+    qrState.timer = setInterval(qrTick, 1000);
+  }, QR_LOADING_MS);
+}
+function qrTick(){
+  var foot = document.getElementById("qr-foot");
+  if (qrState.left <= 0){
+    clearInterval(qrState.timer);
+    var stage = document.getElementById("qr-stage");
+    stage.classList.add("is-expired");
+    foot.innerHTML = '<span class="qr-exp">QR code expirado</span><button type="button" class="sx-btn sx-btn--sm" data-qr="new">Gerar novo código</button>';
+    return;
+  }
+  var m = Math.floor(qrState.left / 60), s = qrState.left % 60;
+  foot.innerHTML = '<span class="qr-wait"><i></i>Aguardando leitura · expira em '+m+':'+(s<10?"0":"")+s+'</span><button type="button" class="qr-link" data-qr="new">Gerar novo código</button>';
+  qrState.left--;
+}
+function closeQrModal(){
+  clearInterval(qrState.timer); clearTimeout(qrState.loadTimer);
+  document.getElementById("qr-modal").classList.remove("is-open");
+}
+function initQrModal(){
+  var modal = document.getElementById("qr-modal");
+  modal.addEventListener("click", function(e){
+    if (e.target === modal){ closeQrModal(); return; }
+    var b = e.target.closest("[data-qr]"); if (!b) return;
+    if (b.getAttribute("data-qr") === "close") closeQrModal();
+    if (b.getAttribute("data-qr") === "new") qrGenerate();
+  });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("is-open")) closeQrModal(); });
 }
 
 /* ================= configurações ================= */
@@ -2134,9 +2205,7 @@ function init(){
     if (!b || b.disabled) return;
     if (b.getAttribute("data-int") === "ml-connect") connectMl();
     if (b.getAttribute("data-int") === "ml-disconnect") disconnectMl();
-    if (b.getAttribute("data-int") === "other"){
-      toast("A conexão com a " + b.getAttribute("data-int-name") + " está sendo liberada. Por enquanto, publique pelo Mercado Livre.");
-    }
+    if (b.getAttribute("data-int") === "other") openQrModal(b.getAttribute("data-int-key"), b.getAttribute("data-int-name"));
   });
   document.getElementById("int-address").addEventListener("click", function(e){
     var one = e.target.closest("[data-copy]"), all = e.target.closest("[data-copy-all]");
@@ -2153,6 +2222,7 @@ function init(){
 
   document.getElementById("config-form").addEventListener("submit", saveConfig);
   initListingEditor();
+  initQrModal();
 
   renderPainel();
 }
