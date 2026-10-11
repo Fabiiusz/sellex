@@ -461,3 +461,20 @@ main{padding-bottom:0}
 .qr-link{font:500 12.5px var(--sx-font);color:var(--sx-blue-light);background:none;border:0;cursor:pointer;padding:0}
 .qr-link:hover{color:#fff}
 @media (prefers-reduced-motion:reduce){.qr-skeleton,.qr-wait i{animation:none}}
+
+/* classificação do vendedor */
+.lvl{margin-top:18px;padding:16px;border-radius:16px;border:1px solid rgba(242,185,59,.35);background:linear-gradient(135deg,rgba(242,185,59,.10),rgba(242,185,59,.02) 60%,transparent)}
+.lvl-head{display:flex;align-items:center;gap:12px}
+.lvl-medal{width:40px;height:40px;flex:0 0 40px;border-radius:12px;display:grid;place-items:center;color:#2A1D00;background:linear-gradient(135deg,#FFE08A,#F2B93B);box-shadow:0 8px 20px -8px rgba(242,185,59,.8)}
+.lvl-medal svg{width:20px;height:20px}
+.lvl-label{display:block;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--sx-muted)}
+.lvl-name{font-size:16px;font-weight:600;color:#FFD66B}
+.lvl-sold{margin:14px 0 8px;font-size:13px;color:var(--sx-muted)}
+.lvl-sold b{font-size:20px;font-weight:600;color:var(--sx-text);margin-right:2px}
+.lvl-bar{height:10px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden}
+.lvl-bar span{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#F2B93B,#FFE08A);box-shadow:0 0 12px rgba(242,185,59,.6);transform-origin:left;animation:lvl-grow 1s ease-out}
+@keyframes lvl-grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.lvl-scale{display:flex;justify-content:space-between;font-size:11.5px;color:var(--sx-dim);margin-top:6px}
+.lvl-next{margin:10px 0 0;font-size:12.5px;color:var(--sx-muted)}
+.lvl-next b{color:var(--sx-text);font-weight:500}
+@media (prefers-reduced-motion:reduce){.lvl-bar span{animation:none}}

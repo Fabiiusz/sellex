@@ -380,6 +380,21 @@ function renderPainel(){
   renderMlMini();
   renderOnboarding();
 }
+var ONBOARDING_DEMO = true;
+var SELLER_LEVEL = { name: "Gold", sold: 366000, from: 100000, to: 500000, next: "Platinum" };
+function fmtMil(v){ return "R$ " + fmtInt(v / 1000) + " mil"; }
+function sellerLevelHTML(){
+  var L = SELLER_LEVEL;
+  var pct = Math.max(0, Math.min(100, (L.sold - L.from) / (L.to - L.from) * 100));
+  return '<div class="lvl">' +
+    '<div class="lvl-head"><span class="lvl-medal"><svg><use href="#trophy"/></svg></span>' +
+      '<div><span class="lvl-label">Classificação</span><b class="lvl-name">Vendedor '+L.name+'</b></div></div>' +
+    '<div class="lvl-sold"><b>'+fmtMil(L.sold)+'</b> vendidos</div>' +
+    '<div class="lvl-bar" role="progressbar" aria-valuemin="'+L.from+'" aria-valuemax="'+L.to+'" aria-valuenow="'+L.sold+'"><span style="width:'+pct.toFixed(1)+'%"></span></div>' +
+    '<div class="lvl-scale"><span>'+fmtMil(L.from)+'</span><span>'+fmtMil(L.to)+'</span></div>' +
+    '<p class="lvl-next">Faltam <b>'+fmtMil(L.to - L.sold)+'</b> para Vendedor '+L.next+'</p>' +
+  '</div>';
+}
 function renderOnboarding(){
   var el = document.getElementById("onboarding");
   if (!el) return;
@@ -388,13 +403,15 @@ function renderOnboarding(){
     {done: state.products.length > 0, title: "Escolha produtos do fornecedor", desc: "Na Mineração, clique em + nos produtos que quer vender.", goto: "mineracao", cta: "Abrir Mineração"},
     {done: state.products.some(function(p){ return p.mlItemId; }), title: "Publique no Mercado Livre", desc: "Abra um produto, revise o anúncio e clique em Publicar produto.", goto: "produtos", cta: "Ver produtos"}
   ];
+  // SIMULADO (fase de testes): todos os passos concluídos e nível Gold para todos os usuários
+  if (ONBOARDING_DEMO) steps.forEach(function(s){ s.done = true; });
   var doneCount = steps.filter(function(s){ return s.done; }).length;
   el.innerHTML = '<div class="sx-card__head"><h2 class="sx-card__title">Primeiros passos</h2><span class="sx-badge">'+doneCount+' de '+steps.length+'</span></div>' +
     '<ol class="onb-list">' + steps.map(function(s){
       return '<li class="onb-step'+(s.done?' is-done':'')+'"><span class="onb-check" aria-hidden="true">'+(s.done?'<svg><use href="#check"/></svg>':'')+'</span>' +
         '<div class="onb-text"><b>'+escapeHtml(s.title)+'</b><span>'+escapeHtml(s.desc)+'</span>' +
         (!s.done && s.goto ? '<a class="sx-btn sx-btn--sm" href="#" data-goto="'+s.goto+'">'+escapeHtml(s.cta)+'</a>' : '') + '</div></li>';
-    }).join("") + '</ol>';
+    }).join("") + '</ol>' + (ONBOARDING_DEMO ? sellerLevelHTML() : '');
 }
 
 /* ================= produtos: dashboard + grid limpo ================= */
