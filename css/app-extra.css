@@ -426,3 +426,8 @@ main{padding-bottom:0}
 .trend-row .mining-card{scroll-snap-align:start}
 @media (max-width:560px){.trend{padding:14px}.trend-row{grid-auto-columns:78%}}
 .mining-layout>*{min-width:0}.trend{min-width:0}.mining-hot-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mining-hot-line b{color:#fff;font-weight:600}
+/* top 3 vencedores da semana */
+.mining-badge--top{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:5px 10px;color:#2A1D00;background:linear-gradient(135deg,#FFE08A,#F2B93B);border-color:rgba(255,230,160,.9);box-shadow:0 6px 16px -6px rgba(242,185,59,.8)}
+.mining-badge--top svg{width:12px;height:12px}
+.mining-card.is-top{border-color:rgba(242,185,59,.5);box-shadow:var(--sx-glow),0 20px 40px -24px rgba(242,185,59,.45)}
+.filter-check--hot svg{color:#F2B93B}

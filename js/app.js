@@ -666,8 +666,8 @@ function importedCatalogIds(){
 }
 
 /* ================= mineração de produtos ================= */
-/* "Em alta da semana" (SIMULADO): sorteia produtos com estoque, fixo durante a semana e diferente a cada semana */
-var TRENDING_COUNT = 12;
+/* "Vencedores da semana" — TOP 3 (SIMULADO): sorteia produtos com estoque, fixo durante a semana e diferente a cada semana */
+var TRENDING_COUNT = 3;
 function weekKey(d){
   d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
   var day = d.getUTCDay() || 7;
@@ -686,18 +686,6 @@ function computeTrending(){
   catalog.trendingList = picks.map(function(x, i){ catalog.trending[x.id] = { rank: i + 1, units: x.units }; return x.id; });
 }
 function trendInfo(id){ return catalog.trending ? catalog.trending[id] || null : null; }
-function renderTrendingRow(imported){
-  var host = document.getElementById("mining-trending");
-  if (!host) return;
-  var m = state.mining;
-  var list = (catalog.trendingList || []).map(function(id){ return catalog.byId[id]; }).filter(Boolean);
-  if (!catalog.loaded || !list.length || m.search || m.onlyTrending){ host.hidden = true; host.innerHTML = ""; return; }
-  host.hidden = false;
-  host.innerHTML = '<div class="trend-head"><div><h2><svg><use href="#flame"/></svg>Em alta da semana</h2><p class="sx-muted">Os produtos que mais saíram nos últimos 7 dias.</p></div>' +
-    '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-trend-all>Ver todos</button></div>' +
-    '<div class="trend-row">' + list.map(function(r){ return miningCardHTML(r, imported); }).join("") + '</div>';
-}
-
 function matchesMining(row, imported){
   var m = state.mining;
   if (m.onlyTrending && !trendInfo(row.id)) return false;
@@ -719,14 +707,18 @@ function sortMining(list){
   if (s==="price-asc") copy.sort(function(a,b){ return tierCost(a).value - tierCost(b).value; });
   else if (s==="price-desc") copy.sort(function(a,b){ return tierCost(b).value - tierCost(a).value; });
   else if (s==="stock") copy.sort(function(a,b){ return b.stock - a.stock; });
-  else if (s==="hot") copy.sort(function(a,b){ var x = trendInfo(a.id), y = trendInfo(b.id); return (x ? x.rank : 999) - (y ? y.rank : 999) || a._order - b._order; });
   else if (s==="name") copy.sort(function(a,b){ return a.name.localeCompare(b.name,'pt-BR'); });
   else copy.sort(function(a,b){ return a._order - b._order; });
+  // os 3 vencedores da semana ficam no topo na ordenação padrão
+  if ((s==="recent" || !s) && !state.mining.search){
+    var top = copy.filter(function(r){ return trendInfo(r.id); }).sort(function(a,b){ return trendInfo(a.id).rank - trendInfo(b.id).rank; });
+    copy = top.concat(copy.filter(function(r){ return !trendInfo(r.id); }));
+  }
   return copy;
 }
 function renderMiningChips(){
   var m = state.mining, chips = [];
-  if (m.onlyTrending) chips.push({key:"onlyTrending", label:"Em alta da semana"});
+  if (m.onlyTrending) chips.push({key:"onlyTrending", label:"Top 3 da semana"});
   if (m.inStock) chips.push({key:"inStock", label:"Só com estoque"});
   if (m.withGtin) chips.push({key:"withGtin", label:"Com código de barras"});
   if (m.notImported) chips.push({key:"notImported", label:"Ainda não importados"});
@@ -765,7 +757,6 @@ function renderMining(){
     return;
   }
   grid.innerHTML = shown.map(function(r){ return miningCardHTML(r, imported); }).join("");
-  renderTrendingRow(imported);
 }
 function miningCardHTML(r, imported){
     var added = !!imported[r.id];
@@ -774,18 +765,17 @@ function miningCardHTML(r, imported){
     var noStock = !(r.stock > 0);
     var badges = '';
     var tr = trendInfo(r.id);
-    if (tr) badges += '<span class="mining-badge mining-badge--hot" title="Em alta da semana"><svg><use href="#flame"/></svg>Em alta</span>';
+    if (tr) badges += '<span class="mining-badge mining-badge--top" title="Vencedor da semana"><svg><use href="#trophy"/></svg>Top '+tr.rank+'</span>';
     if (noStock) badges += '<span class="mining-badge" style="color:#FF8A83">Esgotado</span>';
     if (r.gtin) badges += '<span class="mining-badge">GTIN</span>';
     var canAdd = !added && !noStock;
-    return '<div class="mining-card'+(tr?' is-hot':'')+'">' +
+    return '<div class="mining-card'+(tr?' is-top':'')+'">' +
       '<div class="mining-badges">'+badges+'</div>' +
       '<div class="mining-card__img" style="background:'+prodTileBg(r._category)+'">'+iconSVG("box")+(r.image_url ? productImg(r.image_url, r.name) : '')+'</div>' +
       '<div class="mining-card__body">' +
         '<div class="mining-card__price"><span class="now">'+fmtBRL(cost.value)+'</span><span class="sx-muted" style="font-size:12px">custo'+(cost.exact?'':' (lista)')+'</span></div>' +
         '<div class="mining-card__name" title="'+escapeHtml(r.name)+'">'+escapeHtml(r.name)+'</div>' +
         '<div class="sx-muted" style="font-size:12px">Venda sugerida '+fmtBRL(sale)+' · '+escapeHtml(r._category)+'</div>' +
-        (tr ? '<div class="mining-hot-line"><svg><use href="#flame"/></svg><b>#'+tr.rank+'</b> · '+fmtInt(tr.units)+' vendas na semana</div>' : '') +
         '<div class="mining-card__meta">' +
           '<span class="sold-label">'+(noStock ? 'Sem estoque' : fmtInt(r.stock)+' em estoque')+'</span>' +
           (r.sku ? '<span class="sold-label" title="SKU">'+escapeHtml(r.sku)+'</span>' : '<span></span>') +
@@ -2110,17 +2100,6 @@ function init(){
   document.getElementById("mining-grid").addEventListener("click", function(e){
     var addBtn = e.target.closest("[data-mining-add]");
     if (addBtn && !addBtn.disabled) addFromMining(addBtn.getAttribute("data-mining-add"));
-  });
-  document.getElementById("mining-trending").addEventListener("click", function(e){
-    var addBtn = e.target.closest("[data-mining-add]");
-    if (addBtn && !addBtn.disabled){ addFromMining(addBtn.getAttribute("data-mining-add")); return; }
-    if (e.target.closest("[data-trend-all]")){
-      state.mining.onlyTrending = true;
-      state.mining.sort = "hot";
-      var cb = document.querySelector('[data-mfilter="onlyTrending"]'); if (cb) cb.checked = true;
-      document.getElementById("mining-sort").value = "hot";
-      miningChanged();
-    }
   });
   document.getElementById("product-form").addEventListener("submit", saveProductForm);
   document.getElementById("f-price").addEventListener("input", updateModalCostHint);
