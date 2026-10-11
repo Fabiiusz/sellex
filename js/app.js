@@ -1033,6 +1033,9 @@ var PUB_STEPS = [
   { key: "publish", label: "Publicando no Mercado Livre", done: "Sucesso na publicação" }
 ];
 var pub = { running: false };
+// MODO TESTE: true = simula a publicação (não envia nada ao Mercado Livre e não exige conta conectada).
+// Para publicar de verdade, troque para false.
+var PUBLISH_TEST_MODE = true;
 function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 function pubRender(stateByKey, finalOk){
   document.getElementById("pub-steps").innerHTML = PUB_STEPS.map(function(s, i){
@@ -1058,6 +1061,12 @@ function pubOpen(p){
   document.getElementById("pub-title").textContent = p.title || p.name;
   document.getElementById("pub-result").innerHTML = "";
   document.getElementById("pub-modal").classList.add("is-open");
+}
+function pubFinish(){
+  clearTimeout(pub.autoTimer);
+  pubClose();
+  if (ad.id) leaveListingEditor(false);
+  goToPage("produtos");
 }
 function pubClose(){
   if (pub.running) return;
@@ -1131,6 +1140,7 @@ function runPublish(p){
   }).then(function(){
     states.prepare = "ok";
     return step("integration", function(){
+      if (PUBLISH_TEST_MODE) return;
       return refreshMlStatus().catch(function(){}).then(function(){
         if (!ml.account){ pubFail(states, "integration", "Sua conta do Mercado Livre ainda não está conectada ao Sellex.", { connect: true }); stop(); }
         if (ml.account.status && ml.account.status !== "connected"){ pubFail(states, "integration", "A conexão com o Mercado Livre expirou. Conecte de novo.", { connect: true }); stop(); }
@@ -1140,8 +1150,13 @@ function runPublish(p){
     states.integration = "ok";
     states.publish = "run"; pubRender(states);
     var client = sb();
-    if (!client){ pubFail(states, "publish", "Sem conexão com o servidor do Sellex.", { retry: true }); stop(); }
-    return client.functions.invoke("ml-publish", { method: "POST", body: payload }).then(function(res){
+    var request = PUBLISH_TEST_MODE
+      ? wait(1400).then(function(){
+          return { data: { ok: true, test: true, id: "MLB" + String(Date.now()).slice(-10), permalink: null, available_quantity: p.stock, description_saved: true } };
+        })
+      : (client ? client.functions.invoke("ml-publish", { method: "POST", body: payload }) : null);
+    if (!request){ pubFail(states, "publish", "Sem conexão com o servidor do Sellex.", { retry: true }); stop(); }
+    return request.then(function(res){
       var r = res.data;
       if (!r && res.error){
         return functionErrorCode(res.error).then(function(code){
@@ -1161,6 +1176,7 @@ function runPublish(p){
       p.mlItemId = r.id;
       p.mlPermalink = r.permalink || null;
       p.status = "publicado";
+      p.testPublish = !!r.test;
       p.publishedAt = new Date().toISOString();
       if (r.available_quantity != null) p.stock = r.available_quantity;
       saveJSON(STORE_KEYS.products, state.products);
@@ -1175,8 +1191,12 @@ function runPublish(p){
           (r.description_saved === false ? ' A descrição não foi aceita; você pode ajustá-la direto no Mercado Livre.' : '') + '</p>' +
         '<div class="pub-actions" style="justify-content:center">' +
           (p.mlPermalink ? '<a class="sx-btn sx-btn--ghost sx-btn--sm" href="'+escapeHtml(p.mlPermalink)+'" target="_blank" rel="noopener">Ver anúncio</a>' : '') +
-          '<button type="button" class="sx-btn sx-btn--sm" data-pub="done">Concluir</button>' +
+          '<button type="button" class="sx-btn sx-btn--sm" data-pub="done">Ir para Produtos</button>' +
         '</div></div>';
+      clearTimeout(pub.autoTimer);
+      pub.autoTimer = setTimeout(function(){
+        if (document.getElementById("pub-modal").classList.contains("is-open") && pub.productId === p.id) pubFinish();
+      }, 2200);
     });
   }).catch(function(e){
     if (!e || !e.stop){ pubFail(states, "publish", "Algo deu errado ao publicar. Tente de novo.", { retry: true }); }
@@ -1447,7 +1467,7 @@ function initListingEditor(){
     if (a === "close"){ pubClose(); return; }
     if (a === "retry" && p){ pubClose(); runPublish(p); return; }
     if (a === "connect"){ pubClose(); goToPage("integracoes"); return; }
-    if (a === "done"){ pubClose(); leaveListingEditor(false); goToPage("produtos"); }
+    if (a === "done") pubFinish();
   });
   document.addEventListener("keydown", function(e){
     if (e.key === "Escape" && document.getElementById("pub-modal").classList.contains("is-open")) pubClose();
