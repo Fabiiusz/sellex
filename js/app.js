@@ -167,7 +167,7 @@ function prodThumb(p){
   return icon;
 }
 function productMarginPct(p){
-  if (p && p.fees && p.cost != null && p.price > 0) return Math.max(0, productUnitProfit(p) / p.price * 100);
+  if (p && p.fees && p.cost > 0) return Math.max(0, productUnitProfit(p) / p.cost * 100);
   if (p && p.cost != null && p.price > 0) return Math.max(0, (p.price - p.cost) / p.price * 100);
   var m = p && p.margin!=null ? p.margin : (state.settings.defaultMargin!=null ? state.settings.defaultMargin : 35);
   return Math.max(0, Math.min(95, m));
@@ -597,9 +597,7 @@ function tierCost(row){
   return { value: Number(row.price_list || 0), exact: false };
 }
 function suggestedSalePrice(cost){
-  var m = (state.settings.defaultMargin!=null ? state.settings.defaultMargin : 35) / 100;
-  m = Math.min(0.9, Math.max(0, m));
-  return Math.round((cost / (1 - m)) * 100) / 100;
+  return priceForMargin(cost, adDefaults());
 }
 function productImg(src, alt){
   return '<img class="prod-photo" src="'+escapeHtml(src)+'" alt="'+escapeHtml(alt||"")+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">';
@@ -815,6 +813,7 @@ function addFromMining(id){
   if (importedCatalogIds()[id]) return;
   var p = productFromCatalog(r);
   p.fees = adDefaults();
+  p.marginModel = "cost";
   if ((p.title || "").length > 60){ p.title = suggestTitle(p); p.name = p.title; }
   p.price = priceForMargin(p.cost, p.fees);
   p.margin = p.fees.margin;
@@ -853,13 +852,19 @@ function adDefaults(){
     margin: s.defaultMargin != null ? s.defaultMargin : 30
   };
 }
-function num(v){ v = parseFloat(String(v).replace(",", ".")); return isNaN(v) ? 0 : v; }
+function num(v){ v = String(v == null ? "" : v).replace(/[^\d,.\-]/g, ""); if (v.indexOf(",") > -1) v = v.replace(/\./g, "").replace(",", "."); v = parseFloat(v); return isNaN(v) ? 0 : v; }
 function round2(v){ return Math.round(v * 100) / 100; }
 // preço que deixa a margem pedida depois de comissão, taxa fixa e antecipação
+// margem SOBRE O CUSTO: lucro = custo × margem; o preço cobre custo + lucro + taxa fixa + antecipação
 function priceForMargin(cost, f){
-  var den = 1 - (f.advance + f.margin) / 100;
-  if (den <= 0.02) den = 0.02;
-  return round2((cost + f.fixedFee) / den);
+  var den = 1 - f.advance / 100;
+  if (den <= 0.05) den = 0.05;
+  return round2((cost * (1 + f.margin / 100) + f.fixedFee) / den);
+}
+function marginFromPrice(p){
+  var cost = p.cost || 0;
+  if (!(cost > 0)) return 0;
+  return Math.round(feesBreakdown(p).profit / cost * 1000) / 10;
 }
 function feesBreakdown(p){
   var f = p.fees || adDefaults();
@@ -1253,7 +1258,12 @@ function openListingEditor(id, opts){
   ad.id = id; ad.isNew = !!opts.isNew; ad.from = opts.from || "produtos"; ad.sel = 0;
   ad.titleOpts = null; ad.titleRound = 0; ad.descStyle = null;
   if (!p.fees) p.fees = adDefaults();
-  if (p.fees.commission){ p.fees.commission = 0; if (!p.mlItemId) p.price = priceForMargin(p.cost || 0, p.fees); saveJSON(STORE_KEYS.products, state.products); }
+  if (p.fees.commission || p.marginModel !== "cost"){
+    p.fees.commission = 0; p.marginModel = "cost";
+    if (!p.mlItemId) p.price = priceForMargin(p.cost || 0, p.fees);
+    else p.fees.margin = marginFromPrice(p);
+    saveJSON(STORE_KEYS.products, state.products);
+  }
   if (!p.images) p.images = p.image ? [p.image] : [];
   if (!p.title) p.title = p.name;
   if (!p.supplierName) p.supplierName = p.name;
@@ -1299,7 +1309,7 @@ function renderAdFinance(p){
     '<div class="r"><span>Antecipação ('+fmtPctBR(b.f.advance)+')</span><b>− '+fmtBRL(b.advance)+'</b></div>' +
     '<div class="r total'+(b.profit<=0?' is-neg':'')+'"><span>Lucro estimado</span><b>'+fmtBRL(b.profit)+'</b></div>';
   var priceEl = document.getElementById("ad-price");
-  if (document.activeElement !== priceEl) priceEl.value = (p.price || 0).toFixed(2);
+  if (document.activeElement !== priceEl) priceEl.value = (p.price || 0).toFixed(2).replace(".", ",");
 }
 function fmtPctBR(v){ return String(round2(v)).replace(".", ",") + "%"; }
 function renderAdChecks(p){
@@ -1373,7 +1383,7 @@ function adFieldChanged(el){
   if (el.id === "ad-price"){
     p.price = Math.max(0, round2(num(el.value)));
     var b = feesBreakdown(p);
-    p.fees.margin = p.price > 0 ? Math.round(b.profit / p.price * 1000) / 10 : 0;
+    p.fees.margin = marginFromPrice(p);
     document.getElementById("ad-margin").value = p.fees.margin;
   }
   p.margin = p.fees.margin;
@@ -1410,7 +1420,7 @@ function initListingEditor(){
   });
   page.addEventListener("change", function(e){
     if (e.target.matches("select[data-ad]")) adFieldChanged(e.target);
-    if (e.target.id === "ad-price"){ var p = adProduct(); if (p) e.target.value = (p.price||0).toFixed(2); }
+    if (e.target.id === "ad-price"){ var p = adProduct(); if (p) e.target.value = (p.price||0).toFixed(2).replace(".", ","); }
   });
   page.addEventListener("click", function(e){
     var p = adProduct(); if (!p) return;
@@ -1959,7 +1969,7 @@ function saveConfig(ev){
   state.settings.pauseNoStock = document.getElementById("cfg-pause").checked;
   state.settings.autoPrice = document.getElementById("cfg-autoprice").checked;
   state.settings.notify = document.getElementById("cfg-notify").checked;
-  state.settings.defaultMargin = Math.min(85, Math.max(0, parseFloat(document.getElementById("cfg-margin").value) || 0));
+  state.settings.defaultMargin = Math.min(500, Math.max(0, parseFloat(document.getElementById("cfg-margin").value) || 0));
   var oldTier = state.settings.c7Tier;
   state.settings.c7Tier = document.getElementById("cfg-tier").value || "DROPSHIPPING";
   saveJSON(STORE_KEYS.settings, state.settings);

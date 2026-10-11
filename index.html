@@ -366,7 +366,7 @@
           <label class="row between"><span>Pausar anúncio sem estoque</span><input type="checkbox" class="sx-switch" id="cfg-pause"></label>
           <label class="row between"><span>Reajuste automático de preço</span><input type="checkbox" class="sx-switch" id="cfg-autoprice"></label>
           <label class="row between"><span>Notificar por e-mail</span><input type="checkbox" class="sx-switch" id="cfg-notify"></label>
-          <div><label class="sx-label" for="cfg-margin">Margem padrão (%)</label><input id="cfg-margin" class="sx-input" type="number" min="0" max="85" step="1"><p class="sx-muted" style="font-size:12.5px;margin:6px 0 0">Usada para sugerir o preço de venda: custo ÷ (1 − margem).</p></div>
+          <div><label class="sx-label" for="cfg-margin">Margem padrão (%)</label><input id="cfg-margin" class="sx-input" type="number" min="0" max="500" step="1"><p class="sx-muted" style="font-size:12.5px;margin:6px 0 0">Lucro em cima do custo. Ex.: custo R$ 100 com 35% = R$ 35 de lucro. O preço sugerido soma também as taxas.</p></div>
           <div><label class="sx-label" for="cfg-tier">Sua faixa de preço no fornecedor</label>
             <select class="sx-select" id="cfg-tier">
               <option value="DROPSHIPPING">Dropshipping</option>
@@ -458,13 +458,13 @@
           <div class="ad-two ad-fees">
             <div class="ad-box"><label class="sx-label" for="ad-fixed">Taxa fixa (R$)</label><div class="ad-suffix"><input class="sx-input" id="ad-fixed" data-fee="fixedFee" type="number" min="0" step="0.01"><span>R$</span></div></div>
             <div class="ad-box"><label class="sx-label" for="ad-advance">Antecipação (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-advance" data-fee="advance" type="number" min="0" max="30" step="0.01"><span>%</span></div></div>
-            <div class="ad-box"><label class="sx-label" for="ad-margin">Margem (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-margin" data-fee="margin" type="number" min="0" max="80" step="0.1"><span>%</span></div></div>
+            <div class="ad-box"><label class="sx-label" for="ad-margin">Margem sobre o custo (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-margin" data-fee="margin" type="number" min="0" max="500" step="0.1"><span>%</span></div></div>
           </div>
           <h3 class="ad-h" style="margin-top:22px">Resumo financeiro</h3>
           <div class="ad-sum" id="ad-sum"></div>
           <div class="ad-price">
             <label for="ad-price">Preço de venda ao comprador</label>
-            <div class="ad-price__input"><span>R$</span><input id="ad-price" type="number" min="0" step="0.01"></div>
+            <div class="ad-price__input"><span>R$</span><input id="ad-price" type="text" inputmode="decimal" autocomplete="off"></div>
           </div>
           <p class="sx-muted ad-note">As taxas variam por categoria e tipo de anúncio no Mercado Livre. Ajuste se precisar; o Sellex lembra os valores para os próximos produtos.</p>
         </div>
