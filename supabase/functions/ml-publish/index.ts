@@ -20,10 +20,51 @@ const CORS = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const fail = (step: string, error: string, message: string, causes: string[] = []) => {
+const fail = (step: string, error: string, message: string, causes: string[] = [], extra: Record<string, unknown> = {}) => {
   console.log("ml-publish: falhou", JSON.stringify({ step, error, causes }));
-  return json({ ok: false, step, error, message, causes });
+  return json({ ok: false, step, error, message, causes, ...extra });
 };
+
+// Atributos que o Sellex já preenche sozinho
+const OWN_ATTRS = new Set(["BRAND", "MODEL", "GTIN", "EMPTY_GTIN_REASON", "ITEM_CONDITION",
+  "SELLER_PACKAGE_HEIGHT", "SELLER_PACKAGE_WIDTH", "SELLER_PACKAGE_LENGTH", "SELLER_PACKAGE_WEIGHT", "SELLER_SKU"]);
+const norm = (t: unknown) => String(t ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+// Preenche os atributos obrigatórios da categoria com a ficha técnica do fornecedor
+// (pares "Cor: Preto") e com o que o lojista informou; devolve os que ainda faltam.
+function fillRequired(catAttrs: any[], specs: { k: string; v: string }[], extra: any[], have: Set<string>) {
+  const filled: any[] = [], missing: any[] = [];
+  const extraById = new Map<string, any>();
+  for (const e of extra) if (e && /^[A-Z0-9_]{2,60}$/.test(String(e.id))) extraById.set(String(e.id), e);
+  for (const a of catAttrs) {
+    const tags = a?.tags ?? {};
+    if (!(tags.required || tags.catalog_required) || tags.read_only || tags.hidden) continue;
+    const id = String(a.id);
+    if (have.has(id) || OWN_ATTRS.has(id)) continue;
+    const values: any[] = Array.isArray(a.values) ? a.values : [];
+    const pick = (raw: string) => {
+      const v = String(raw).trim().slice(0, 255);
+      if (!v) return null;
+      if (values.length) {
+        const hit = values.find((x) => norm(x.name) === norm(v)) ?? values.find((x) => norm(v).includes(norm(x.name)) && norm(x.name).length > 1);
+        if (hit) return { id, value_id: String(hit.id), value_name: hit.name };
+        if (a.value_type === "list" && !tags.allow_variations) return null;
+      }
+      return { id, value_name: v };
+    };
+    let got: any = null;
+    const ex = extraById.get(id);
+    if (ex) got = ex.value_id ? { id, value_id: String(ex.value_id), value_name: ex.value_name ?? null } : pick(ex.value_name ?? "");
+    if (!got) {
+      const n = norm(a.name);
+      const sp = specs.find((s) => norm(s.k) === n) ?? specs.find((s) => n.length > 2 && (norm(s.k).includes(n) || n.includes(norm(s.k))) && norm(s.k).length > 2);
+      if (sp) got = pick(sp.v);
+    }
+    if (got) filled.push(got);
+    else missing.push({ id, name: String(a.name ?? id), values: values.slice(0, 60).map((x) => ({ id: String(x.id), name: String(x.name) })) });
+  }
+  return { filled, missing };
+}
 
 const GTIN_REASON: Record<string, string> = {
   no_code: "O produto não tem código cadastrado",
@@ -163,6 +204,22 @@ Deno.serve(async (req: Request) => {
   if (dims?.width_cm) attributes.push({ id: "SELLER_PACKAGE_WIDTH", value_name: `${Math.ceil(Number(dims.width_cm))} cm` });
   if (dims?.length_cm) attributes.push({ id: "SELLER_PACKAGE_LENGTH", value_name: `${Math.ceil(Number(dims.length_cm))} cm` });
   if (dims?.weight_kg) attributes.push({ id: "SELLER_PACKAGE_WEIGHT", value_name: `${Math.ceil(Number(dims.weight_kg) * 1000)} g` });
+
+  // Atributos obrigatórios da categoria
+  const catAttrs = await fetch(`${ML}/categories/${categoryId}/attributes`, { headers: H, signal: AbortSignal.timeout(15_000) })
+    .then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  const specs = (Array.isArray(b.specs) ? b.specs : []).slice(0, 60)
+    .map((x: any) => ({ k: String(x?.k ?? "").slice(0, 60), v: String(x?.v ?? "").slice(0, 120) })).filter((x: any) => x.k && x.v);
+  const extra = Array.isArray(b.extraAttrs) ? b.extraAttrs.slice(0, 40) : [];
+  const reqAttrs = fillRequired(Array.isArray(catAttrs) ? catAttrs : [], specs, extra, new Set(attributes.map((a) => a.id)));
+  attributes.push(...reqAttrs.filled);
+  if (reqAttrs.missing.length) {
+    const catName = await fetch(`${ML}/categories/${categoryId}`, { signal: AbortSignal.timeout(10_000) })
+      .then((r) => (r.ok ? r.json() : null)).then((c) => c?.name ?? null).catch(() => null);
+    return fail("publish", "missing_attributes",
+      `A categoria${catName ? " \"" + catName + "\"" : ""} do Mercado Livre pede mais informações sobre o produto.`,
+      reqAttrs.missing.map((m: any) => m.name), { missing_attributes: reqAttrs.missing, category_id: categoryId, category_name: catName });
+  }
 
   const item: Record<string, unknown> = {
     title,

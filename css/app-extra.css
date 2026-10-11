@@ -480,3 +480,7 @@ main{padding-bottom:0}
 @media (prefers-reduced-motion:reduce){.lvl-bar span{animation:none}}
 .pub-addr{display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;margin:0 0 14px;padding:12px 14px;border-radius:12px;border:1px solid rgba(206,213,255,.16);background:rgba(255,255,255,.02);font-size:12.5px;color:var(--sx-muted)}
 .pub-addr b{color:var(--sx-text);font-weight:500;font-size:13px}
+/* atributos pedidos pela categoria do ML */
+.pub-attrs{display:grid;gap:12px;max-height:46vh;overflow:auto;padding-right:2px}
+.pub-attrs label{display:grid;gap:6px;font-size:12.5px;color:var(--sx-muted)}
+.pub-attrs .pub-actions{position:sticky;bottom:0;padding-top:6px;background:linear-gradient(transparent,rgba(10,12,24,.95) 30%)}

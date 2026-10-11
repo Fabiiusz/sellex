@@ -1142,6 +1142,26 @@ function pubFail(states, key, message, opts){
                     : (opts.retry ? '<button type="button" class="sx-btn sx-btn--sm" data-pub="retry">Tentar de novo</button>' : '')) +
     '</div>';
 }
+// a categoria do ML pediu atributos que não estavam na ficha: o lojista preenche aqui e publica de novo
+function pubAskAttributes(states, p, r){
+  states.publish = "fail"; pubRender(states);
+  pub.running = false;
+  pub.missing = r.missing_attributes;
+  var prev = {}; (p.extraAttrs || []).forEach(function(a){ prev[a.id] = a; });
+  document.getElementById("pub-result").innerHTML =
+    '<p class="pub-msg">'+escapeHtml(r.message || "O Mercado Livre pede mais informações sobre o produto.")+' Preencha e publique de novo:</p>' +
+    '<form class="pub-attrs" id="pub-attrs">' + r.missing_attributes.map(function(m, i){
+      var cur = prev[m.id] || {};
+      var field = m.values && m.values.length
+        ? '<select class="sx-select" data-attr="'+i+'" required><option value="">Selecione</option>' + m.values.map(function(v){
+            return '<option value="'+escapeHtml(v.id)+'"'+(cur.value_id===v.id?' selected':'')+'>'+escapeHtml(v.name)+'</option>'; }).join("") + '</select>'
+        : '<input class="sx-input" data-attr="'+i+'" required value="'+escapeHtml(cur.value_name || "")+'" placeholder="'+escapeHtml(m.name)+'">';
+      return '<label><span>'+escapeHtml(m.name)+'</span>'+field+'</label>';
+    }).join("") +
+    '<div class="pub-actions"><button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pub="close">Fechar</button>' +
+    '<button type="submit" class="sx-btn sx-btn--sm">Preencher e publicar</button></div></form>';
+  var first = document.querySelector("#pub-attrs [data-attr]"); if (first) first.focus();
+}
 function fetchCatalogStock(id){
   var url = SUPABASE_URL + "/rest/v1/catalog_products?select=stock,active&id=eq." + encodeURIComponent(id);
   return fetch(url, { headers: { apikey: SUPABASE_KEY, Accept: "application/json" } })
@@ -1188,7 +1208,9 @@ function runPublish(p){
         description: (p.description || "").trim(),
         price: p.price, brand: (p.brand || "").trim(), model: (p.model || "").trim(),
         gtin: (p.gtin || "").replace(/\D/g, ""), gtinReason: p.gtinReason || "",
-        images: (p.images || []).filter(function(u){ return /^https:\/\//.test(u); }).slice(0, 10)
+        images: (p.images || []).filter(function(u){ return /^https:\/\//.test(u); }).slice(0, 10),
+        specs: specPairs(p).slice(0, 60),
+        extraAttrs: p.extraAttrs || []
       };
       if (!payload.images.length){ pubFail(states, "prepare", "O Mercado Livre exige pelo menos uma foto com endereço público (https).", { fix: true }); stop(); }
     });
@@ -1223,6 +1245,10 @@ function runPublish(p){
       if (!r || !r.ok){
         var key = r && PUB_STEPS.some(function(s){ return s.key === r.step; }) ? r.step : "publish";
         PUB_STEPS.forEach(function(s, i){ if (i >= PUB_STEPS.findIndex(function(x){ return x.key === key; })) delete states[s.key]; });
+        if (r && r.error === "missing_attributes" && Array.isArray(r.missing_attributes)){
+          pubAskAttributes(states, p, r);
+          stop();
+        }
         pubFail(states, key, (r && r.message) || "O Mercado Livre não aceitou o anúncio.", {
           causes: r && r.causes, connect: r && /ml_not_connected|ml_expired/.test(r.error || ""), retry: !(r && r.error === "ml_rejected"), fix: r && r.error === "ml_rejected",
           address: r && (r.causes || []).some(function(c){ return /endereço/i.test(c); })
@@ -1529,6 +1555,22 @@ function initListingEditor(){
     if (a === "retry" && p){ pubClose(); runPublish(p); return; }
     if (a === "connect"){ pubClose(); goToPage("integracoes"); return; }
     if (a === "done") pubFinish();
+  });
+  document.getElementById("pub-modal").addEventListener("submit", function(e){
+    if (e.target.id !== "pub-attrs") return;
+    e.preventDefault();
+    var p = productById(pub.productId); if (!p || !pub.missing) return;
+    var map = {}; (p.extraAttrs || []).forEach(function(a){ map[a.id] = a; });
+    e.target.querySelectorAll("[data-attr]").forEach(function(el){
+      var m = pub.missing[+el.getAttribute("data-attr")]; if (!m) return;
+      if (el.tagName === "SELECT"){
+        var opt = el.options[el.selectedIndex];
+        if (el.value) map[m.id] = { id: m.id, value_id: el.value, value_name: opt ? opt.textContent : null };
+      } else if (el.value.trim()) map[m.id] = { id: m.id, value_name: el.value.trim() };
+    });
+    p.extraAttrs = Object.keys(map).map(function(k){ return map[k]; });
+    saveJSON(STORE_KEYS.products, state.products);
+    pubClose(); runPublish(p);
   });
   document.addEventListener("keydown", function(e){
     if (e.key === "Escape" && document.getElementById("pub-modal").classList.contains("is-open")) pubClose();
