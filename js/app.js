@@ -386,7 +386,7 @@ function renderOnboarding(){
   var steps = [
     {done: !!(typeof ml !== "undefined" && ml.account), title: "Conecte sua conta do Mercado Livre", desc: "Você autoriza na página do próprio Mercado Livre.", goto: "integracoes", cta: "Conectar"},
     {done: state.products.length > 0, title: "Escolha produtos do fornecedor", desc: "Na Mineração, clique em + nos produtos que quer vender.", goto: "mineracao", cta: "Abrir Mineração"},
-    {done: state.products.some(function(p){ return p.mlItemId; }), title: "Publique no Mercado Livre", desc: "A publicação direto do Sellex chega em breve.", goto: null, cta: null}
+    {done: state.products.some(function(p){ return p.mlItemId; }), title: "Publique no Mercado Livre", desc: "Abra um produto, revise o anúncio e clique em Publicar produto.", goto: "produtos", cta: "Ver produtos"}
   ];
   var doneCount = steps.filter(function(s){ return s.done; }).length;
   el.innerHTML = '<div class="sx-card__head"><h2 class="sx-card__title">Primeiros passos</h2><span class="sx-badge">'+doneCount+' de '+steps.length+'</span></div>' +
@@ -810,7 +810,7 @@ function refreshProductsFromCatalog(){
   return changed;
 }
 /* ================= preparar anúncio (tela do produto antes de publicar) ================= */
-var ad = { id: null, isNew: false, from: "mineracao", sel: 0, dragFrom: null, saveTimer: null };
+var ad = { id: null, isNew: false, from: "mineracao", sel: 0, dragFrom: null, saveTimer: null, titleOpts: null, titleRound: 0, descStyle: null };
 var DETAIL_FIELDS = "id,short_description,description_html,images,gtin,weight_kg,width_cm,height_cm,length_cm";
 
 function adDefaults(){
@@ -892,30 +892,295 @@ function applyCatalogDetail(p, d){
   if (!p.description) p.description = suggestDescription(p);
 }
 
-function suggestTitle(p){
-  var t = String(p.supplierName || p.name || "").replace(/\s+/g, " ").trim();
-  t = t.replace(/\b([A-ZÀ-Ú]{4,})\b/g, function(w){ return /\d/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase(); });
-  if (p.brand && t.toLowerCase().indexOf(p.brand.toLowerCase()) === -1 && !/gen[eé]ric/i.test(p.brand)) t = t + " " + p.brand;
-  if (t.length > 60){ t = t.slice(0, 60); t = t.slice(0, t.lastIndexOf(" ") > 30 ? t.lastIndexOf(" ") : 60); }
-  return t.replace(/[\s,;\-–]+$/, "");
+/* ---------- gerador de títulos e descrições (a partir dos dados de cada produto) ---------- */
+var DESC_STYLES = [
+  { key: "completa", label: "Completa" },
+  { key: "direta", label: "Direta" },
+  { key: "destaques", label: "Destaques" }
+];
+var SKIP_VALUES = /^(sim|não|nao|n\/a|-|aleat[oó]ri[ao]|outros?|unidade|novo|genérica|generica)$/i;
+function specPairs(p){
+  var text = (p.detail && p.detail.text) || "";
+  var out = [];
+  text.split("\n").forEach(function(l){
+    var m = l.match(/^([^:]{2,40}):\s*(.{1,80})$/);
+    if (m && !/^https?$/i.test(m[1].trim())) out.push({ k: m[1].trim(), v: m[2].trim() });
+  });
+  return out;
 }
-function suggestDescription(p){
-  var d = p.detail || {};
-  var parts = [p.title || p.name];
-  if (d.short) parts.push(d.short);
-  if (d.text){
-    var body = d.text;
-    if (d.short && body.indexOf(d.short.slice(0, 40)) > -1) body = body.replace(d.short, "").trim();
-    if (body) parts.push(body);
-  }
-  var spec = [];
+function proseLines(p){
+  var text = (p.detail && p.detail.text) || "";
+  return text.split("\n").map(function(l){ return l.trim(); }).filter(function(l){
+    return l.length > 40 && !/^([^:]{2,40}):\s*(.{1,80})$/.test(l);
+  });
+}
+function titleCaseCaps(t){
+  return t.replace(/\b([A-ZÀ-Ú]{4,})\b/g, function(w){ return /\d/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase(); });
+}
+function fitTitle(t){
+  var seen = {}, words = String(t).replace(/[|•;]+/g, " ").replace(/\s+/g, " ").trim().split(" ");
+  words = words.filter(function(w){ var k = w.toLowerCase(); if (w.length > 2 && seen[k]) return false; seen[k] = 1; return true; });
+  t = words.join(" ");
+  if (t.length > 60){ t = t.slice(0, 61); t = t.slice(0, t.lastIndexOf(" ") > 25 ? t.lastIndexOf(" ") : 60); }
+  t = t.replace(/[\s,\-–\/]+$/, "");
+  while (/\s(e|de|da|do|das|dos|para|com|a|o|em|sem|p\/)$/i.test(t)) t = t.replace(/\s\S+$/, "");
+  return t;
+}
+function productFeatures(p){
+  var want = /(cor|voltagem|tens[aã]o|pot[eê]ncia|capacidade|material|tamanho|resolu|conectividade|bateria|frequ[eê]ncia|quantidade|velocidade|comprimento|volume)/i;
+  var feats = [];
+  specPairs(p).forEach(function(x){
+    if (!want.test(x.k) || SKIP_VALUES.test(x.v) || x.v.length > 18) return;
+    var v = x.v;
+    if (/quantidade/i.test(x.k) && /^\d+$/.test(v)) v = v + " Peças";
+    if (/^(110|127|220)\s*v?\s*\/\s*(220|127)/i.test(v) || /bivolt/i.test(v)) v = "Bivolt";
+    feats.push(v);
+  });
+  return feats.filter(function(v, i){ return feats.indexOf(v) === i; });
+}
+function titleOptions(p, round){
+  var base = titleCaseCaps(String(p.supplierName || p.name || "").replace(/\s+/g, " ").trim());
+  var brand = (p.brand || "").trim(), model = (p.model || "").trim();
+  var useBrand = brand && !/gen[eé]ric/i.test(brand) && base.toLowerCase().indexOf(brand.toLowerCase()) === -1;
+  var hasModel = model && base.toLowerCase().indexOf(model.toLowerCase()) === -1;
+  var words = base.split(" ");
+  var core = words.slice(0, Math.min(words.length, 4)).join(" ");
+  var feats = productFeatures(p);
+  var off = feats.length ? round % feats.length : 0;
+  var f = feats.slice(off).concat(feats.slice(0, off));
+  var cand = [
+    { t: base, why: "Nome do fornecedor" },
+    { t: core + (useBrand ? " " + brand : "") + (hasModel ? " " + model : "") + (f[0] ? " " + f[0] : ""), why: "Marca e modelo" },
+    { t: base + (f[0] ? " " + f[0] : "") + (f[1] ? " " + f[1] : ""), why: "Com características" },
+    { t: core + (f[0] ? " " + f[0] : "") + (f[1] ? " " + f[1] : "") + (f[2] ? " " + f[2] : "") + (useBrand ? " " + brand : ""), why: "Palavras-chave" },
+    { t: (p.category && base.toLowerCase().indexOf(p.category.split(" ")[0].toLowerCase()) === -1 ? core + " " + (hasModel ? model + " " : "") + "para " + p.category : core + (hasModel ? " " + model : "") + (useBrand ? " " + brand : "")), why: "Busca por categoria" }
+  ];
+  var out = [], seen = {};
+  cand.forEach(function(c){
+    var t = fitTitle(c.t);
+    var k = t.toLowerCase();
+    if (t.length >= Math.min(25, base.length) && !seen[k]){ seen[k] = 1; out.push({ t: t, why: c.why }); }
+  });
+  return out.slice(0, 4);
+}
+function suggestTitle(p){ var o = titleOptions(p, 0); return o.length ? o[0].t : fitTitle(p.name || ""); }
+
+function specBlock(p){
+  var d = p.detail || {}, spec = [];
   if (p.brand) spec.push("Marca: " + p.brand);
   if (p.model) spec.push("Modelo: " + p.model);
   if (d.weight) spec.push("Peso: " + String(d.weight).replace(".", ",") + " kg");
   if (d.dims) spec.push("Dimensões da embalagem: " + d.dims.map(function(x){ return String(x).replace(".", ","); }).join(" x ") + " cm");
-  if (spec.length) parts.push("Especificações\n" + spec.join("\n"));
-  parts.push("Produto novo. Enviamos com nota fiscal.");
+  return spec;
+}
+function suggestDescription(p, style){
+  style = style || "completa";
+  var d = p.detail || {};
+  var title = p.title || p.name;
+  var pairs = specPairs(p).filter(function(x){ return !/^(marca|modelo|nome do modelo|condi[cç][aã]o|fabricante|nr\.? de homologa)/i.test(x.k) && !SKIP_VALUES.test(x.v); });
+  var prose = proseLines(p).filter(function(l){ return !d.short || l.indexOf(d.short.slice(0, 40)) === -1; });
+  var bullets = pairs.map(function(x){ return "- " + x.k + ": " + x.v; });
+  var spec = specBlock(p);
+  var parts = [];
+  if (style === "direta"){
+    parts.push(title);
+    if (d.short) parts.push(d.short);
+    if (bullets.length) parts.push(bullets.slice(0, 6).join("\n"));
+    if (spec.length) parts.push(spec.join("\n"));
+    parts.push("Produto novo, enviado com nota fiscal.");
+  } else if (style === "destaques"){
+    parts.push(title.toUpperCase());
+    if (d.short) parts.push(d.short);
+    var hl = productFeatures(p).map(function(v){ return "- " + v; });
+    if (prose.length) hl = hl.concat(prose.slice(0, 3).map(function(l){ return "- " + l.replace(/[.!]+$/, ""); }));
+    if (hl.length) parts.push("DESTAQUES\n" + hl.slice(0, 7).join("\n"));
+    if (bullets.length || spec.length) parts.push("FICHA TÉCNICA\n" + spec.concat(bullets.map(function(b){ return b.slice(2); })).slice(0, 14).join("\n"));
+    parts.push("ENVIO\nProduto novo, enviado com nota fiscal. Despachamos assim que o pagamento é aprovado.");
+  } else {
+    parts.push(title);
+    if (d.short) parts.push(d.short);
+    if (bullets.length) parts.push("PRINCIPAIS CARACTERÍSTICAS\n" + bullets.slice(0, 12).join("\n"));
+    if (prose.length) parts.push(prose.slice(0, 6).join("\n\n"));
+    if (spec.length) parts.push("ESPECIFICAÇÕES\n" + spec.join("\n"));
+    parts.push("INFORMAÇÕES IMPORTANTES\n- Produto novo\n- Enviado com nota fiscal\n- Em caso de dúvida, use o campo de perguntas antes de comprar");
+  }
   return parts.join("\n\n").slice(0, 5000);
+}
+function renderTitleOptions(p){
+  var box = document.getElementById("ad-title-opts");
+  if (!ad.titleOpts || !ad.titleOpts.length){ box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  box.innerHTML = '<div class="ad-opts__head"><span>Escolha um título</span><span><button type="button" data-gen="title">Gerar outros</button> · <button type="button" data-opts-close>Fechar</button></span></div>' +
+    ad.titleOpts.map(function(o, i){
+      return '<button type="button" class="ad-opt'+(o.t===p.title?' is-current':'')+'" data-title-opt="'+i+'"><span>'+escapeHtml(o.t)+'</span><small>'+o.t.length+'/60 · '+escapeHtml(o.why)+'</small></button>';
+    }).join("");
+}
+function renderDescStyles(){
+  var box = document.getElementById("ad-desc-styles");
+  if (!ad.descStyle){ box.hidden = true; return; }
+  box.hidden = false;
+  box.innerHTML = DESC_STYLES.map(function(s){
+    return '<button type="button" data-desc-style="'+s.key+'" class="'+(s.key===ad.descStyle?'is-active':'')+'">'+s.label+'</button>';
+  }).join("");
+}
+
+/* ---------- popup de publicação ---------- */
+var PUB_STEPS = [
+  { key: "product", label: "Verificando produto" },
+  { key: "stock", label: "Verificando estoque" },
+  { key: "prepare", label: "Preparando anúncio" },
+  { key: "integration", label: "Analisando integração com a loja" },
+  { key: "publish", label: "Publicando no Mercado Livre", done: "Sucesso na publicação" }
+];
+var pub = { running: false };
+function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
+function pubRender(stateByKey, finalOk){
+  document.getElementById("pub-steps").innerHTML = PUB_STEPS.map(function(s, i){
+    var st = stateByKey[s.key] || "";
+    var cls = st === "run" ? "is-run" : st === "ok" ? "is-ok" : st === "fail" ? "is-fail" : "";
+    var icon = st === "ok" ? '<svg><use href="#check"/></svg>' : st === "fail" ? '<svg><use href="#x"/></svg>' : "";
+    var label = (st === "ok" && s.done) ? s.done : s.label;
+    return '<li class="pub-step '+cls+(i===PUB_STEPS.length-1?' is-final':'')+'"><i>'+icon+'</i><span>'+label+'</span></li>';
+  }).join("");
+  var done = PUB_STEPS.filter(function(s){ return stateByKey[s.key] === "ok"; }).length;
+  var running = PUB_STEPS.some(function(s){ return stateByKey[s.key] === "run"; }) ? 0.5 : 0;
+  var bar = document.getElementById("pub-bar");
+  bar.style.width = Math.min(100, (done + running) / PUB_STEPS.length * 100) + "%";
+  bar.parentNode.classList.toggle("is-error", PUB_STEPS.some(function(s){ return stateByKey[s.key] === "fail"; }));
+  bar.parentNode.classList.toggle("is-done", !!finalOk);
+}
+function pubOpen(p){
+  var th = document.getElementById("pub-thumb");
+  th.style.setProperty("--ad-tile", prodTileBg(p.category));
+  var src = (p.images && p.images[0]) || p.image;
+  th.classList.toggle("is-empty", !src);
+  th.innerHTML = iconSVG(p.icon) + (src ? '<img src="'+escapeHtml(src)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add(\'is-empty\');this.remove()">' : "");
+  document.getElementById("pub-title").textContent = p.title || p.name;
+  document.getElementById("pub-result").innerHTML = "";
+  document.getElementById("pub-modal").classList.add("is-open");
+}
+function pubClose(){
+  if (pub.running) return;
+  document.getElementById("pub-modal").classList.remove("is-open");
+}
+function pubFail(states, key, message, opts){
+  opts = opts || {};
+  states[key] = "fail";
+  pubRender(states);
+  pub.running = false;
+  var causes = (opts.causes || []).filter(Boolean);
+  document.getElementById("pub-result").innerHTML =
+    '<p class="pub-msg">'+escapeHtml(message)+'</p>' +
+    (causes.length ? '<ul class="pub-causes">'+causes.map(function(c){ return '<li>'+escapeHtml(c)+'</li>'; }).join("")+'</ul>' : '') +
+    '<div class="pub-actions">' +
+      '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pub="close">'+(opts.fix ? 'Corrigir' : 'Fechar')+'</button>' +
+      (opts.connect ? '<button type="button" class="sx-btn sx-btn--sm" data-pub="connect">Conectar Mercado Livre</button>'
+                    : (opts.retry ? '<button type="button" class="sx-btn sx-btn--sm" data-pub="retry">Tentar de novo</button>' : '')) +
+    '</div>';
+}
+function fetchCatalogStock(id){
+  var url = SUPABASE_URL + "/rest/v1/catalog_products?select=stock,active&id=eq." + encodeURIComponent(id);
+  return fetch(url, { headers: { apikey: SUPABASE_KEY, Accept: "application/json" } })
+    .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function(rows){ return rows && rows[0] ? rows[0] : null; });
+}
+function runPublish(p){
+  if (pub.running) return;
+  pub.running = true;
+  pub.productId = p.id;
+  var states = {};
+  pubOpen(p);
+  pubRender(states);
+  var STEP_MS = 750, payload = null;
+  function step(key, work){
+    states[key] = "run"; pubRender(states);
+    var t0 = Date.now();
+    return Promise.resolve().then(work).then(function(v){
+      return wait(Math.max(0, STEP_MS - (Date.now() - t0))).then(function(){ return v; });
+    });
+  }
+  function stop(){ var e = new Error("stop"); e.stop = true; throw e; }
+
+  step("product", function(){
+    var m = adMissing(p);
+    if (m.length){ pubFail(states, "product", "Antes de publicar, preencha: " + m.join(", ") + ".", { fix: true }); stop(); }
+  }).then(function(){
+    states.product = "ok";
+    return step("stock", function(){
+      if (!p.catalogId) return;
+      return fetchCatalogStock(p.catalogId).catch(function(){ return { failed: true }; }).then(function(r){
+        if (r && r.failed){ pubFail(states, "stock", "Não consegui consultar o estoque do fornecedor agora.", { retry: true }); stop(); }
+        if (!r || r.active === false){ pubFail(states, "stock", "Este produto não está mais no catálogo do fornecedor."); stop(); }
+        p.stock = Math.max(0, r.stock || 0);
+        if (p.stock <= 0){ pubFail(states, "stock", "O fornecedor está sem estoque deste produto agora. Tente de novo quando ele repor."); stop(); }
+      });
+    });
+  }).then(function(){
+    states.stock = "ok";
+    return step("prepare", function(){
+      payload = {
+        catalogId: p.catalogId || null, sku: p.sku || null, stock: p.stock,
+        title: (p.title || p.name).trim().slice(0, 60),
+        description: (p.description || "").trim(),
+        price: p.price, brand: (p.brand || "").trim(), model: (p.model || "").trim(),
+        gtin: (p.gtin || "").replace(/\D/g, ""), gtinReason: p.gtinReason || "",
+        images: (p.images || []).filter(function(u){ return /^https:\/\//.test(u); }).slice(0, 10)
+      };
+      if (!payload.images.length){ pubFail(states, "prepare", "O Mercado Livre exige pelo menos uma foto com endereço público (https).", { fix: true }); stop(); }
+    });
+  }).then(function(){
+    states.prepare = "ok";
+    return step("integration", function(){
+      return refreshMlStatus().catch(function(){}).then(function(){
+        if (!ml.account){ pubFail(states, "integration", "Sua conta do Mercado Livre ainda não está conectada ao Sellex.", { connect: true }); stop(); }
+        if (ml.account.status && ml.account.status !== "connected"){ pubFail(states, "integration", "A conexão com o Mercado Livre expirou. Conecte de novo.", { connect: true }); stop(); }
+      });
+    });
+  }).then(function(){
+    states.integration = "ok";
+    states.publish = "run"; pubRender(states);
+    var client = sb();
+    if (!client){ pubFail(states, "publish", "Sem conexão com o servidor do Sellex.", { retry: true }); stop(); }
+    return client.functions.invoke("ml-publish", { method: "POST", body: payload }).then(function(res){
+      var r = res.data;
+      if (!r && res.error){
+        return functionErrorCode(res.error).then(function(code){
+          pubFail(states, "publish", code === "network" ? "Sem conexão com o servidor. Verifique sua internet." :
+            (code === "http_401" ? "Sua sessão expirou. Entre de novo no Sellex." : "O servidor não conseguiu publicar agora."), { retry: true });
+          stop();
+        });
+      }
+      if (!r || !r.ok){
+        var key = r && PUB_STEPS.some(function(s){ return s.key === r.step; }) ? r.step : "publish";
+        PUB_STEPS.forEach(function(s, i){ if (i >= PUB_STEPS.findIndex(function(x){ return x.key === key; })) delete states[s.key]; });
+        pubFail(states, key, (r && r.message) || "O Mercado Livre não aceitou o anúncio.", {
+          causes: r && r.causes, connect: r && /ml_not_connected|ml_expired/.test(r.error || ""), retry: !(r && r.error === "ml_rejected"), fix: r && r.error === "ml_rejected"
+        });
+        stop();
+      }
+      p.mlItemId = r.id;
+      p.mlPermalink = r.permalink || null;
+      p.status = "publicado";
+      p.publishedAt = new Date().toISOString();
+      if (r.available_quantity != null) p.stock = r.available_quantity;
+      saveJSON(STORE_KEYS.products, state.products);
+      states.publish = "ok";
+      pubRender(states, true);
+      pub.running = false;
+      ad.isNew = false;
+      document.getElementById("pub-result").innerHTML =
+        '<div class="pub-success"><div class="pub-success__ico"><svg><use href="#check"/></svg></div>' +
+        '<h3>Produto publicado!</h3>' +
+        '<p class="pub-msg">Anúncio <b>'+escapeHtml(r.id)+'</b> criado no Mercado Livre por <b>'+fmtBRL(p.price)+'</b>.' +
+          (r.description_saved === false ? ' A descrição não foi aceita; você pode ajustá-la direto no Mercado Livre.' : '') + '</p>' +
+        '<div class="pub-actions" style="justify-content:center">' +
+          (p.mlPermalink ? '<a class="sx-btn sx-btn--ghost sx-btn--sm" href="'+escapeHtml(p.mlPermalink)+'" target="_blank" rel="noopener">Ver anúncio</a>' : '') +
+          '<button type="button" class="sx-btn sx-btn--sm" data-pub="done">Concluir</button>' +
+        '</div></div>';
+    });
+  }).catch(function(e){
+    if (!e || !e.stop){ pubFail(states, "publish", "Algo deu errado ao publicar. Tente de novo.", { retry: true }); }
+  });
 }
 
 function adProduct(){ return ad.id ? productById(ad.id) : null; }
@@ -935,6 +1200,7 @@ function openListingEditor(id, opts){
   if (!p) return;
   opts = opts || {};
   ad.id = id; ad.isNew = !!opts.isNew; ad.from = opts.from || "produtos"; ad.sel = 0;
+  ad.titleOpts = null; ad.titleRound = 0; ad.descStyle = null;
   if (!p.fees) p.fees = adDefaults();
   if (!p.images) p.images = p.image ? [p.image] : [];
   if (!p.title) p.title = p.name;
@@ -1022,6 +1288,10 @@ function renderListingEditor(){
   set("ad-margin", p.fees.margin);
   renderAdFinance(p);
   renderAdChecks(p);
+  renderTitleOptions(p);
+  renderDescStyles();
+  var pubBtn = document.getElementById("ad-publish");
+  pubBtn.textContent = p.mlItemId ? "Ver no Mercado Livre" : "Publicar produto";
 }
 function adSaved(){
   var el = document.getElementById("ad-saved");
@@ -1076,20 +1346,12 @@ function leaveListingEditor(discard){
 }
 function publishListing(){
   var p = adProduct(); if (!p) return;
-  var m = adMissing(p);
-  if (m.length){ toast("Antes de publicar, preencha: " + m.join(", ") + ".", true); return; }
-  if (!ml.account){
-    p.status = "pronto"; saveJSON(STORE_KEYS.products, state.products);
-    toast("Anúncio salvo. Conecte sua conta do Mercado Livre para publicar.", true);
-    ad.isNew = false; ad.id = null;
-    goToPage("integracoes");
+  if (p.mlItemId){
+    if (p.mlPermalink) window.open(p.mlPermalink, "_blank", "noopener");
+    else toast("Este produto já está publicado no Mercado Livre (" + p.mlItemId + ").");
     return;
   }
-  p.status = "pronto";
-  saveJSON(STORE_KEYS.products, state.products);
-  toast("Anúncio pronto e salvo. O envio direto ao Mercado Livre será ativado em breve.");
-  ad.isNew = false;
-  leaveListingEditor(false);
+  runPublish(p);
 }
 function initListingEditor(){
   var page = document.getElementById("page-anuncio");
@@ -1105,9 +1367,32 @@ function initListingEditor(){
     var p = adProduct(); if (!p) return;
     var gen = e.target.closest("[data-gen]");
     if (gen){
-      if (gen.getAttribute("data-gen") === "title"){ p.title = suggestTitle(p); p.name = p.title; }
-      else p.description = suggestDescription(p);
-      renderListingEditor(); adSaved(); return;
+      if (gen.getAttribute("data-gen") === "title"){
+        ad.titleOpts = titleOptions(p, ad.titleRound++);
+        renderTitleOptions(p);
+      } else {
+        var i = DESC_STYLES.findIndex(function(x){ return x.key === ad.descStyle; });
+        ad.descStyle = DESC_STYLES[(i + 1) % DESC_STYLES.length].key;
+        p.description = suggestDescription(p, ad.descStyle);
+        document.getElementById("ad-desc").value = p.description;
+        renderDescStyles(); adSaved();
+      }
+      return;
+    }
+    var opt = e.target.closest("[data-title-opt]");
+    if (opt){
+      var o = ad.titleOpts[+opt.getAttribute("data-title-opt")];
+      p.title = o.t; p.name = o.t;
+      document.getElementById("ad-title").value = o.t;
+      renderAdChecks(p); renderTitleOptions(p); adSaved(); return;
+    }
+    if (e.target.closest("[data-opts-close]")){ ad.titleOpts = null; renderTitleOptions(p); return; }
+    var ds = e.target.closest("[data-desc-style]");
+    if (ds){
+      ad.descStyle = ds.getAttribute("data-desc-style");
+      p.description = suggestDescription(p, ad.descStyle);
+      document.getElementById("ad-desc").value = p.description;
+      renderDescStyles(); adSaved(); return;
     }
     var th = e.target.closest("[data-thumb]");
     if (th){ ad.sel = +th.getAttribute("data-thumb"); renderAdGallery(p); return; }
@@ -1154,6 +1439,19 @@ function initListingEditor(){
     leaveListingEditor(ad.isNew);
   });
   document.getElementById("ad-publish").addEventListener("click", publishListing);
+  document.getElementById("pub-modal").addEventListener("click", function(e){
+    var b = e.target.closest("[data-pub]");
+    if (!b) return;
+    var a = b.getAttribute("data-pub");
+    var p = productById(pub.productId);
+    if (a === "close"){ pubClose(); return; }
+    if (a === "retry" && p){ pubClose(); runPublish(p); return; }
+    if (a === "connect"){ pubClose(); goToPage("integracoes"); return; }
+    if (a === "done"){ pubClose(); leaveListingEditor(false); goToPage("produtos"); }
+  });
+  document.addEventListener("keydown", function(e){
+    if (e.key === "Escape" && document.getElementById("pub-modal").classList.contains("is-open")) pubClose();
+  });
 }
 
 function syncMiningViewButtons(){

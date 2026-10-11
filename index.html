@@ -407,14 +407,16 @@
 
           <div class="ad-field">
             <div class="ad-field__head"><label class="sx-label" for="ad-title">Título</label>
-              <button type="button" class="ad-gen" data-gen="title"><svg><use href="#star"/></svg>Gerar sugestão</button></div>
+              <button type="button" class="ad-gen" data-gen="title"><svg><use href="#star"/></svg>Gerar títulos</button></div>
             <input class="sx-input" id="ad-title" data-ad="title" maxlength="60" placeholder="Nome do produto como aparece no anúncio">
             <div class="ad-count"><span id="ad-title-count">0</span>/60</div>
+            <div class="ad-opts" id="ad-title-opts" hidden></div>
           </div>
 
           <div class="ad-field">
             <div class="ad-field__head"><label class="sx-label" for="ad-desc">Descrição</label>
-              <button type="button" class="ad-gen" data-gen="desc"><svg><use href="#star"/></svg>Gerar sugestão</button></div>
+              <button type="button" class="ad-gen" data-gen="desc"><svg><use href="#star"/></svg>Gerar descrição</button></div>
+            <div class="ad-desc-styles" id="ad-desc-styles" hidden></div>
             <textarea class="sx-textarea" id="ad-desc" data-ad="description" rows="9" placeholder="Descreva o produto para o comprador"></textarea>
           </div>
 
@@ -501,6 +503,19 @@
       <label class="row between"><span>Anúncio ativo</span><input type="checkbox" class="sx-switch" id="f-active" checked></label>
       <button class="sx-btn sx-btn--block" type="submit">Salvar produto</button>
     </form>
+  </div>
+</div>
+
+<!-- ===================== POPUP DE PUBLICAÇÃO ===================== -->
+<div class="modal-overlay" id="pub-modal" role="dialog" aria-modal="true" aria-labelledby="pub-title">
+  <div class="sx-card pub">
+    <div class="pub-head">
+      <div class="pub-thumb" id="pub-thumb"></div>
+      <div class="pub-head__txt"><span class="sx-muted">Publicando no Mercado Livre</span><b id="pub-title"></b></div>
+    </div>
+    <div class="pub-bar"><span id="pub-bar"></span></div>
+    <ol class="pub-steps" id="pub-steps"></ol>
+    <div class="pub-result" id="pub-result"></div>
   </div>
 </div>
 
