@@ -92,6 +92,7 @@
       <a class="sx-nav__item" href="#" data-page="pedidos"><svg><use href="#truck"/></svg><span>Pedidos</span></a>
       <a class="sx-nav__item" href="#" data-page="integracoes"><svg><use href="#plug"/></svg><span>Integrações</span></a>
       <a class="sx-nav__item" href="#" data-page="config"><svg><use href="#settings"/></svg><span>Configurações</span></a>
+      <a class="sx-nav__item" href="#" data-page="clientes" id="nav-clientes" hidden><svg><use href="#crown"/></svg><span>Clientes</span></a>
     </nav>
     <div class="sx-header__actions">
       <button class="sx-btn sx-btn--ghost sx-btn--icon" aria-label="Notificações"><svg><use href="#bell"/></svg></button>
@@ -346,6 +347,27 @@
           <button type="button" class="addr-copy addr-copy--all" data-copy-all><svg><use href="#copy"/></svg><span>Copiar tudo</span></button>
         </div>
         <div class="addr-grid" id="addr-grid"></div>
+      </div>
+    </section>
+
+    <!-- ===================== CLIENTES (só administrador) ===================== -->
+    <section id="page-clientes" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Clientes</h1><p class="sx-muted">Quem se cadastrou no Sellex. Libere o acesso quando o sistema estiver pronto para a pessoa.</p></div>
+        <button class="sx-btn sx-btn--ghost sx-btn--sm" type="button" id="cli-refresh"><svg><use href="#refresh"/></svg>Atualizar</button>
+      </div>
+      <div class="grid g-3 cli-kpis" id="cli-kpis"></div>
+      <div class="sx-card">
+        <div class="cli-tools">
+          <div class="sx-tabs" id="cli-tabs" role="tablist">
+            <button class="sx-tab" type="button" data-cli="pending" aria-selected="true">Aguardando</button>
+            <button class="sx-tab" type="button" data-cli="approved" aria-selected="false">Liberados</button>
+            <button class="sx-tab" type="button" data-cli="all" aria-selected="false">Todos</button>
+          </div>
+          <div class="sx-search cli-search"><svg><use href="#search"/></svg><input class="sx-input" id="cli-search" placeholder="Buscar por nome ou e-mail"></div>
+          <button class="sx-btn sx-btn--ghost sx-btn--sm" type="button" id="cli-copy"><svg><use href="#copy"/></svg>Copiar e-mails</button>
+        </div>
+        <div id="cli-list"></div>
       </div>
     </section>
 

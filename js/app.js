@@ -1838,6 +1838,7 @@ function onSignedIn(session){
   account.email = u.email || "";
   account.name = (u.user_metadata && u.user_metadata.name) || account.email.split("@")[0];
   document.getElementById("auth-gate").hidden = true;
+  document.getElementById("nav-clientes").hidden = !isAdmin();
   loadUserState(u.id);
   renderAccount();
   renderPainel();
@@ -1846,6 +1847,9 @@ function onSignedIn(session){
 }
 function onSignedOut(){
   account = { user: null, name: "", email: "" };
+  document.getElementById("nav-clientes").hidden = true;
+  cli.users = []; cli.loaded = false;
+  if (currentPage() === "clientes") goToPage("painel");
   ml.account = null; ml.loaded = false;
   state.products = []; state.orders = [];
   document.getElementById("auth-password").value = "";
@@ -2109,6 +2113,95 @@ function initQrModal(){
   document.addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("is-open")) closeQrModal(); });
 }
 
+/* ================= clientes (área do administrador) ================= */
+var cli = { users: [], loaded: false, loading: false, tab: "pending", q: "", busy: {} };
+function isAdmin(){ return !!(account.user && account.user.app_metadata && account.user.app_metadata.role === "admin"); }
+function loadClientes(){
+  var client = sb(); if (!client || !isAdmin() || cli.loading) return;
+  cli.loading = true; renderClientes();
+  client.functions.invoke("sx-admin", { method: "POST", body: { action: "list" } }).then(function(r){
+    cli.loading = false;
+    if (r.data && r.data.ok){ cli.users = r.data.users || []; cli.loaded = true; cli.error = null; }
+    else cli.error = "Não consegui carregar a lista agora.";
+    renderClientes();
+  }).catch(function(){ cli.loading = false; cli.error = "Sem conexão com o servidor."; renderClientes(); });
+}
+function cliFiltered(){
+  var q = cli.q;
+  return cli.users.filter(function(u){
+    if (cli.tab === "pending" && !u.pending) return false;
+    if (cli.tab === "approved" && u.pending) return false;
+    return !q || (u.name + " " + u.email).toLowerCase().indexOf(q) > -1;
+  });
+}
+function renderClientes(){
+  var host = document.getElementById("cli-list"); if (!host) return;
+  var total = cli.users.length, pend = cli.users.filter(function(u){ return u.pending; }).length;
+  document.getElementById("cli-kpis").innerHTML = [
+    { l: "Cadastros", v: total }, { l: "Aguardando liberação", v: pend, warn: pend > 0 }, { l: "Com acesso", v: total - pend }
+  ].map(function(c){
+    return '<div class="sx-card"><div class="sx-stat__label">'+c.l+'</div><div class="sx-stat__value"'+(c.warn?' style="color:#FFD66B"':'')+'>'+(cli.loaded?fmtInt(c.v):'—')+'</div></div>';
+  }).join("");
+  if (cli.loading && !cli.loaded){ host.innerHTML = '<div class="empty">Carregando clientes…</div>'; return; }
+  if (cli.error && !cli.loaded){ host.innerHTML = '<div class="empty">'+escapeHtml(cli.error)+' <a href="#" id="cli-retry" style="color:var(--sx-blue-light)">Tentar de novo</a></div>'; return; }
+  var list = cliFiltered();
+  if (!list.length){
+    host.innerHTML = '<div class="empty">' + (cli.tab === "pending" ? "Ninguém aguardando liberação." : "Nenhum cliente encontrado.") + '</div>';
+    return;
+  }
+  host.innerHTML = '<div class="cli-rows">' + list.map(function(u){
+    var busy = cli.busy[u.id];
+    var status = u.admin ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Administrador</span>'
+      : u.pending ? '<span class="sx-badge sx-badge--warning"><i class="sx-dot"></i>Aguardando</span>'
+      : '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Liberado</span>';
+    var act = u.admin ? '' : u.pending
+      ? '<button class="sx-btn sx-btn--sm" type="button" data-cli-act="approve" data-id="'+u.id+'"'+(busy?' disabled':'')+'>'+(busy?'Liberando…':'Liberar acesso')+'</button>'
+      : '<button class="sx-btn sx-btn--ghost sx-btn--sm" type="button" data-cli-act="block" data-id="'+u.id+'"'+(busy?' disabled':'')+'>'+(busy?'Bloqueando…':'Bloquear')+'</button>';
+    return '<div class="cli-row">' +
+      '<span class="sx-avatar cli-av">'+escapeHtml(initials(u.name || u.email))+'</span>' +
+      '<div class="cli-main"><b>'+escapeHtml(u.name || u.email.split("@")[0])+'</b><span>'+escapeHtml(u.email)+'</span></div>' +
+      '<div class="cli-meta"><span>Cadastro: '+escapeHtml(fmtDateBR(u.created_at))+'</span>' +
+        '<span>'+(u.ml ? 'Mercado Livre: '+escapeHtml(u.ml.nickname || "conectado") : 'Mercado Livre não conectado')+'</span></div>' +
+      '<div class="cli-status">'+status+'</div>' +
+      '<div class="cli-act">'+act+'</div>' +
+    '</div>';
+  }).join("") + '</div>';
+}
+function cliAction(action, id){
+  var client = sb(); if (!client) return;
+  var u = cli.users.find(function(x){ return x.id === id; }); if (!u) return;
+  if (action === "block" && !window.confirm("Bloquear o acesso de " + u.email + "? A pessoa volta a ver a tela de liberação.")) return;
+  cli.busy[id] = true; renderClientes();
+  client.functions.invoke("sx-admin", { method: "POST", body: { action: action, user_id: id } }).then(function(r){
+    delete cli.busy[id];
+    if (r.data && r.data.ok){
+      u.pending = action === "block";
+      toast(action === "approve" ? "Acesso liberado para " + u.email + "." : "Acesso de " + u.email + " bloqueado.");
+    } else toast((r.data && r.data.message) || "Não consegui alterar agora. Tente de novo.", true);
+    renderClientes();
+  }).catch(function(){ delete cli.busy[id]; renderClientes(); toast("Sem conexão com o servidor.", true); });
+}
+function initClientes(){
+  document.getElementById("cli-tabs").addEventListener("click", function(e){
+    var b = e.target.closest("[data-cli]"); if (!b) return;
+    cli.tab = b.getAttribute("data-cli");
+    document.querySelectorAll("#cli-tabs .sx-tab").forEach(function(x){ x.setAttribute("aria-selected", x === b ? "true" : "false"); });
+    renderClientes();
+  });
+  document.getElementById("cli-search").addEventListener("input", function(e){ cli.q = e.target.value.trim().toLowerCase(); renderClientes(); });
+  document.getElementById("cli-refresh").addEventListener("click", loadClientes);
+  document.getElementById("cli-copy").addEventListener("click", function(){
+    var emails = cliFiltered().map(function(u){ return u.email; }).filter(Boolean);
+    if (!emails.length){ toast("Nenhum e-mail nesta lista.", true); return; }
+    copyText(emails.join(", ")).then(function(){ toast(emails.length + " e-mail(s) copiado(s)."); }).catch(function(){ toast("Não consegui copiar.", true); });
+  });
+  document.getElementById("page-clientes").addEventListener("click", function(e){
+    var b = e.target.closest("[data-cli-act]");
+    if (b && !b.disabled) cliAction(b.getAttribute("data-cli-act"), b.getAttribute("data-id"));
+    if (e.target.closest("#cli-retry")){ e.preventDefault(); loadClientes(); }
+  });
+}
+
 /* ================= configurações ================= */
 function renderConfig(){
   document.getElementById("cfg-pause").checked = !!state.settings.pauseNoStock;
@@ -2158,6 +2251,7 @@ function goToPage(name, keepScroll){
   if (name==="pedidos"){ renderVendasDashboard(); renderPedidos(); }
   if (name==="integracoes") renderIntegracoes();
   if (name==="config") renderConfig();
+  if (name==="clientes") loadClientes();
   if (name==="anuncio") renderListingEditor();
   if (!keepScroll) window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -2305,6 +2399,7 @@ function init(){
   document.getElementById("config-form").addEventListener("submit", saveConfig);
   initListingEditor();
   initQrModal();
+  initClientes();
 
   renderPainel();
 }
