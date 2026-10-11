@@ -560,6 +560,14 @@
       <button class="sx-btn sx-btn--block" type="submit" id="auth-submit">Entrar</button>
     </form>
   </div>
+  <div class="sx-card auth-pending" id="auth-pending" hidden role="status">
+    <span class="auth-pending__ok"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m8 12.3 2.7 2.7L16.2 9.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <h1>Cadastro realizado com sucesso! 🎉</h1>
+    <h2>Estamos preparando sua área de trabalho na Sellex.</h2>
+    <p class="auth-pending__txt">Seu ambiente está em processo de configuração e liberação de acesso. Nossa equipe está cuidando dos últimos ajustes para que você tenha a melhor experiência.</p>
+    <p class="auth-pending__mail"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>Avisaremos por e-mail assim que seu acesso estiver disponível.</p>
+    <p class="auth-pending__end">Por enquanto, nenhuma ação é necessária. 💜</p>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>

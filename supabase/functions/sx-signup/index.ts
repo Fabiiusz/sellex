@@ -1,5 +1,7 @@
-// sx-signup: cria a conta do lojista já confirmada, sem depender de e-mail de confirmação.
-// (O e-mail padrão do Supabase só entrega para a equipe do projeto, então clientes
-// novos não recebiam o link e não conseguiam entrar.)
-// verify_jwt=false porque quem chama ainda não tem conta. Depois de criar, o front-end
-// entra normalmente com e-mail e senha. Código publicado: ver a versão no Supabase (sx-signup).
+// sx-signup: cria a conta do lojista já confirmada (sem e-mail de confirmação)
+// e com app_metadata.access = "pending" (acesso em liberação).
+// O site mostra o aviso "Cadastro realizado com sucesso / estamos preparando sua área"
+// e não abre o sistema até a conta ser liberada.
+// Para liberar alguém (SQL no Supabase):
+//   update auth.users set raw_app_meta_data = raw_app_meta_data - 'access' where email = 'cliente@exemplo.com';
+// Código publicado: função sx-signup no Supabase (verify_jwt = false).

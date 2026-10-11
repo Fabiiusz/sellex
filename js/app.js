@@ -1767,8 +1767,18 @@ function setAuthMode(mode){
   document.getElementById("auth-password").setAttribute("autocomplete", mode === "signup" ? "new-password" : "current-password");
   showAuthMsg("");
 }
+// conta criada, mas acesso ainda não liberado: mostra o aviso e não abre o sistema
+var pendingShown = false;
+function showPendingAccess(){
+  pendingShown = true;
+  document.getElementById("auth-gate").hidden = false;
+  document.querySelector("#auth-gate .auth-card").hidden = true;
+  document.getElementById("auth-pending").hidden = false;
+}
+function isPendingUser(u){ return !!(u && u.app_metadata && u.app_metadata.access === "pending"); }
 function showAuthGate(message, ok){
   document.getElementById("auth-gate").hidden = false;
+  if (pendingShown) return;
   if (message) showAuthMsg(message, ok);
 }
 function submitAuth(ev){
@@ -1788,7 +1798,7 @@ function submitAuth(ev){
   var p = authMode === "signup"
     ? client.functions.invoke("sx-signup", { method: "POST", body: { email: email, password: password, name: name } }).then(function(r){
         var d = r.data;
-        if (d && d.ok){ btn.textContent = "Entrando…"; return signIn(); }
+        if (d && d.ok){ showPendingAccess(); return { data: {} }; }
         if (d && d.message) return { error: { message: d.message, friendly: true } };
         return { error: r.error || { message: "Não consegui criar a conta agora. Tente de novo em instantes.", friendly: true } };
       })
@@ -1818,6 +1828,11 @@ function renderAccount(){
 }
 function onSignedIn(session){
   var u = session.user;
+  if (isPendingUser(u)){
+    showPendingAccess();
+    var c = sb(); if (c) c.auth.signOut().catch(function(){});
+    return;
+  }
   if (account.user && account.user.id === u.id) return;
   account.user = u;
   account.email = u.email || "";

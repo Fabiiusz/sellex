@@ -484,3 +484,15 @@ main{padding-bottom:0}
 .pub-attrs{display:grid;gap:12px;max-height:46vh;overflow:auto;padding-right:2px}
 .pub-attrs label{display:grid;gap:6px;font-size:12.5px;color:var(--sx-muted)}
 .pub-attrs .pub-actions{position:sticky;bottom:0;padding-top:6px;background:linear-gradient(transparent,rgba(10,12,24,.95) 30%)}
+/* cadastro feito, acesso em liberação */
+.auth-pending{width:100%;max-width:720px;text-align:center;padding:36px 28px 32px}
+.auth-pending[hidden]{display:none}
+.auth-pending__ok{display:inline-grid;place-items:center;width:52px;height:52px;color:var(--sx-green);margin-bottom:10px;animation:pub-pop .45s cubic-bezier(.2,1.6,.4,1)}
+.auth-pending__ok svg{width:46px;height:46px}
+.auth-pending h1{font-size:24px;font-weight:600;margin:0 0 14px;letter-spacing:-.01em}
+.auth-pending h2{font-size:19px;font-weight:500;margin:0 0 14px}
+.auth-pending__txt{font-size:15.5px;line-height:1.6;color:var(--sx-muted);margin:0 auto 26px;max-width:620px}
+.auth-pending__mail{display:inline-flex;align-items:center;gap:10px;font-size:16px;margin:0 0 26px}
+.auth-pending__mail svg{width:20px;height:20px;color:var(--sx-muted);flex-shrink:0}
+.auth-pending__end{font-size:15px;color:var(--sx-muted);margin:0}
+@media (max-width:560px){.auth-pending{padding:28px 18px}.auth-pending h1{font-size:20px}.auth-pending h2{font-size:16.5px}.auth-pending__mail{font-size:14.5px;align-items:flex-start;text-align:left}}
