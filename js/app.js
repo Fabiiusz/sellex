@@ -847,7 +847,7 @@ var DETAIL_FIELDS = "id,short_description,description_html,images,gtin,weight_kg
 function adDefaults(){
   var s = state.settings;
   return {
-    commission: s.mlCommission != null ? s.mlCommission : 16,
+    commission: 0, // comissão removida da tela e da conta
     fixedFee: s.mlFixedFee != null ? s.mlFixedFee : 5,
     advance: s.mlAdvance != null ? s.mlAdvance : 2.99,
     margin: s.defaultMargin != null ? s.defaultMargin : 30
@@ -857,14 +857,14 @@ function num(v){ v = parseFloat(String(v).replace(",", ".")); return isNaN(v) ? 
 function round2(v){ return Math.round(v * 100) / 100; }
 // preço que deixa a margem pedida depois de comissão, taxa fixa e antecipação
 function priceForMargin(cost, f){
-  var den = 1 - (f.commission + f.advance + f.margin) / 100;
+  var den = 1 - (f.advance + f.margin) / 100;
   if (den <= 0.02) den = 0.02;
   return round2((cost + f.fixedFee) / den);
 }
 function feesBreakdown(p){
   var f = p.fees || adDefaults();
   var price = p.price || 0, cost = p.cost || 0;
-  var commission = round2(price * f.commission / 100);
+  var commission = 0;
   var advance = round2(price * f.advance / 100);
   var fixed = round2(f.fixedFee);
   var profit = round2(price - cost - commission - fixed - advance);
@@ -1253,6 +1253,7 @@ function openListingEditor(id, opts){
   ad.id = id; ad.isNew = !!opts.isNew; ad.from = opts.from || "produtos"; ad.sel = 0;
   ad.titleOpts = null; ad.titleRound = 0; ad.descStyle = null;
   if (!p.fees) p.fees = adDefaults();
+  if (p.fees.commission){ p.fees.commission = 0; if (!p.mlItemId) p.price = priceForMargin(p.cost || 0, p.fees); saveJSON(STORE_KEYS.products, state.products); }
   if (!p.images) p.images = p.image ? [p.image] : [];
   if (!p.title) p.title = p.name;
   if (!p.supplierName) p.supplierName = p.name;
@@ -1294,7 +1295,6 @@ function renderAdFinance(p){
   var b = feesBreakdown(p);
   document.getElementById("ad-sum").innerHTML =
     '<div class="r"><span>Custo do produto</span><b>'+fmtBRL(b.cost)+'</b></div>' +
-    '<div class="r"><span>Comissão ('+fmtPctBR(b.f.commission)+')</span><b>− '+fmtBRL(b.commission)+'</b></div>' +
     '<div class="r"><span>Taxa fixa</span><b>− '+fmtBRL(b.fixed)+'</b></div>' +
     '<div class="r"><span>Antecipação ('+fmtPctBR(b.f.advance)+')</span><b>− '+fmtBRL(b.advance)+'</b></div>' +
     '<div class="r total'+(b.profit<=0?' is-neg':'')+'"><span>Lucro estimado</span><b>'+fmtBRL(b.profit)+'</b></div>';
@@ -1333,7 +1333,6 @@ function renderListingEditor(){
   set("ad-gtin-reason", p.gtinReason || "");
   set("ad-sku", p.sku || "—");
   set("ad-stock", fmtInt(p.stock) + " un.");
-  set("ad-commission", p.fees.commission);
   set("ad-fixed", p.fees.fixedFee);
   set("ad-advance", p.fees.advance);
   set("ad-margin", p.fees.margin);
@@ -1367,7 +1366,6 @@ function adFieldChanged(el){
     p.fees[fee] = Math.max(0, num(el.value));
     p.price = priceForMargin(p.cost || 0, p.fees);
     // lembra as taxas para os próximos produtos
-    if (fee === "commission") state.settings.mlCommission = p.fees.commission;
     if (fee === "fixedFee") state.settings.mlFixedFee = p.fees.fixedFee;
     if (fee === "advance") state.settings.mlAdvance = p.fees.advance;
     saveJSON(STORE_KEYS.settings, state.settings);
