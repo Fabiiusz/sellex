@@ -167,6 +167,7 @@ function prodThumb(p){
   return icon;
 }
 function productMarginPct(p){
+  if (p && p.fees && p.cost != null && p.price > 0) return Math.max(0, productUnitProfit(p) / p.price * 100);
   if (p && p.cost != null && p.price > 0) return Math.max(0, (p.price - p.cost) / p.price * 100);
   var m = p && p.margin!=null ? p.margin : (state.settings.defaultMargin!=null ? state.settings.defaultMargin : 35);
   return Math.max(0, Math.min(95, m));
@@ -452,9 +453,9 @@ function renderProdutosGrid(){
     var p = x.p, s = x.sales;
     var st = statusOfProduct(p);
     var pct = maxRevenue>0 ? (s.revenue/maxRevenue*100) : 0;
-    var unitProfit = p.cost != null ? p.price - p.cost : null;
+    var unitProfit = productUnitProfit(p);
     var ch = CHANNELS[p.channel] ? p.channel : "ml";
-    return '<div class="product-card">' +
+    return '<div class="product-card'+(p.catalogId?' is-clickable':'')+'" data-product="'+p.id+'">' +
       '<div class="product-card__actions">' +
         '<button class="icon-btn" data-edit="'+p.id+'" aria-label="Editar"><svg><use href="#edit"/></svg></button>' +
         '<button class="icon-btn icon-btn--danger" data-delete="'+p.id+'" aria-label="Excluir"><svg><use href="#trash"/></svg></button>' +
@@ -468,7 +469,7 @@ function renderProdutosGrid(){
           ? '<div class="sx-muted" style="font-size:12.5px">Custo '+fmtBRL(p.cost)+' · lucro '+fmtBRL(unitProfit)+' por un. ('+fmtInt(productMarginPct(p))+'%)</div>'
           : '<div class="sx-muted" style="font-size:12.5px">Margem '+fmtInt(productMarginPct(p))+'%</div>') +
         '<div class="row" style="gap:6px"><span class="sx-badge sx-badge--'+st.tone+'"><i class="sx-dot"></i>'+st.label+'</span>' +
-          (p.mlItemId ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>No Mercado Livre</span>' : '<span class="sx-badge"><i class="sx-dot"></i>Não publicado</span>') + '</div>' +
+          (p.mlItemId ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>No Mercado Livre</span>' : (p.status==="pronto" ? '<span class="sx-badge sx-badge--info"><i class="sx-dot"></i>Pronto para publicar</span>' : '<span class="sx-badge"><i class="sx-dot"></i>Não publicado</span>')) + '</div>' +
         '<div class="product-stats">' +
           '<div class="figures"><span class="sx-muted">Vendido no período</span><b>'+fmtInt(s.qty)+' un. · '+fmtBRL(s.revenue)+'</b></div>' +
           '<div class="figures"><span class="sx-muted">Lucro no período</span><b>'+fmtBRL(s.profit)+'</b></div>' +
@@ -762,6 +763,10 @@ function productFromCatalog(r){
     name: r.name,
     icon: "box",
     image: r.image_url || null,
+    images: Array.isArray(r.images) && r.images.length ? r.images.slice(0, 12) : (r.image_url ? [r.image_url] : []),
+    supplierName: r.name,
+    title: r.name,
+    gtinAuto: !!r.gtin,
     channel: "ml",
     category: r._category,
     cost: cost,
@@ -778,12 +783,15 @@ function addFromMining(id){
   if (!r) return;
   if (importedCatalogIds()[id]) return;
   var p = productFromCatalog(r);
+  p.fees = adDefaults();
+  if ((p.title || "").length > 60){ p.title = suggestTitle(p); p.name = p.title; }
+  p.price = priceForMargin(p.cost, p.fees);
+  p.margin = p.fees.margin;
   state.products.push(p);
   saveJSON(STORE_KEYS.products, state.products);
   state.orders = loadOrders();
-  renderMining();
   renderSideSummary();
-  toast('"'+r.name+'" adicionado aos seus produtos por '+fmtBRL(p.price)+' (custo '+fmtBRL(p.cost)+').');
+  openListingEditor(p.id, { isNew: true, from: "mineracao" });
 }
 // mantém estoque e custo dos seus produtos iguais aos do fornecedor
 function refreshProductsFromCatalog(){
@@ -801,6 +809,353 @@ function refreshProductsFromCatalog(){
   });
   return changed;
 }
+/* ================= preparar anúncio (tela do produto antes de publicar) ================= */
+var ad = { id: null, isNew: false, from: "mineracao", sel: 0, dragFrom: null, saveTimer: null };
+var DETAIL_FIELDS = "id,short_description,description_html,images,gtin,weight_kg,width_cm,height_cm,length_cm";
+
+function adDefaults(){
+  var s = state.settings;
+  return {
+    commission: s.mlCommission != null ? s.mlCommission : 16,
+    fixedFee: s.mlFixedFee != null ? s.mlFixedFee : 5,
+    advance: s.mlAdvance != null ? s.mlAdvance : 2.99,
+    margin: s.defaultMargin != null ? s.defaultMargin : 30
+  };
+}
+function num(v){ v = parseFloat(String(v).replace(",", ".")); return isNaN(v) ? 0 : v; }
+function round2(v){ return Math.round(v * 100) / 100; }
+// preço que deixa a margem pedida depois de comissão, taxa fixa e antecipação
+function priceForMargin(cost, f){
+  var den = 1 - (f.commission + f.advance + f.margin) / 100;
+  if (den <= 0.02) den = 0.02;
+  return round2((cost + f.fixedFee) / den);
+}
+function feesBreakdown(p){
+  var f = p.fees || adDefaults();
+  var price = p.price || 0, cost = p.cost || 0;
+  var commission = round2(price * f.commission / 100);
+  var advance = round2(price * f.advance / 100);
+  var fixed = round2(f.fixedFee);
+  var profit = round2(price - cost - commission - fixed - advance);
+  return { cost: cost, commission: commission, fixed: fixed, advance: advance, profit: profit, f: f };
+}
+// lucro por unidade considerando as taxas do marketplace, quando configuradas
+function productUnitProfit(p){
+  if (p.cost == null) return null;
+  return p.fees ? feesBreakdown(p).profit : round2(p.price - p.cost);
+}
+
+function htmlToText(html){
+  if (!html) return "";
+  // ficha técnica "<h3>Marca</h3><p>ATK</p>" vira "Marca: ATK"
+  var pairs = String(html).replace(/<(h[3-6]|p)[^>]*>\s*(?:<strong>)?([^<]{1,50}?)(?:<\/strong>)?\s*<\/\1>\s*<p[^>]*>([^<]{1,80})<\/p>/gi, function(all, tag, k, v){
+    return "<p>" + k.trim() + ": " + v.trim() + "</p>";
+  });
+  var t = pairs
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\s*\/\s*(p|div|h[1-6]|li|tr)\s*>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "• ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return t.split("\n").map(function(l){ return l.replace(/\s+/g, " ").trim(); }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+// procura "Marca" / "Modelo" na ficha técnica do fornecedor
+function attrFromText(text, labels){
+  var lines = text.split("\n").map(function(l){ return l.trim(); }).filter(Boolean);
+  for (var i = 0; i < lines.length; i++){
+    var low = lines[i].toLowerCase().replace(/:$/, "");
+    for (var j = 0; j < labels.length; j++){
+      if (low === labels[j] && lines[i+1] && lines[i+1].length < 60) return lines[i+1];
+      if (low.indexOf(labels[j] + ":") === 0) return lines[i].slice(labels[j].length + 1).trim();
+    }
+  }
+  return "";
+}
+function fetchCatalogDetail(id){
+  var url = SUPABASE_URL + "/rest/v1/catalog_products?select=" + DETAIL_FIELDS + "&id=eq." + encodeURIComponent(id);
+  return fetch(url, { headers: { apikey: SUPABASE_KEY, Accept: "application/json" } })
+    .then(function(r){ if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function(rows){ return rows && rows[0] ? rows[0] : null; });
+}
+function applyCatalogDetail(p, d){
+  if (!d) return;
+  p.detail = {
+    short: d.short_description || "",
+    text: htmlToText(d.description_html),
+    weight: d.weight_kg != null ? Number(d.weight_kg) : null,
+    dims: d.width_cm != null ? [Number(d.width_cm), Number(d.height_cm), Number(d.length_cm)] : null
+  };
+  if ((!p.images || p.images.length <= 1) && Array.isArray(d.images) && d.images.length) p.images = d.images.slice(0, 12);
+  if (!p.gtin && d.gtin){ p.gtin = d.gtin; p.gtinAuto = true; }
+  if (!p.brand) p.brand = attrFromText(p.detail.text, ["marca"]);
+  if (!p.model) p.model = attrFromText(p.detail.text, ["modelo", "nome do modelo"]);
+  if (!p.description) p.description = suggestDescription(p);
+}
+
+function suggestTitle(p){
+  var t = String(p.supplierName || p.name || "").replace(/\s+/g, " ").trim();
+  t = t.replace(/\b([A-ZÀ-Ú]{4,})\b/g, function(w){ return /\d/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase(); });
+  if (p.brand && t.toLowerCase().indexOf(p.brand.toLowerCase()) === -1 && !/gen[eé]ric/i.test(p.brand)) t = t + " " + p.brand;
+  if (t.length > 60){ t = t.slice(0, 60); t = t.slice(0, t.lastIndexOf(" ") > 30 ? t.lastIndexOf(" ") : 60); }
+  return t.replace(/[\s,;\-–]+$/, "");
+}
+function suggestDescription(p){
+  var d = p.detail || {};
+  var parts = [p.title || p.name];
+  if (d.short) parts.push(d.short);
+  if (d.text){
+    var body = d.text;
+    if (d.short && body.indexOf(d.short.slice(0, 40)) > -1) body = body.replace(d.short, "").trim();
+    if (body) parts.push(body);
+  }
+  var spec = [];
+  if (p.brand) spec.push("Marca: " + p.brand);
+  if (p.model) spec.push("Modelo: " + p.model);
+  if (d.weight) spec.push("Peso: " + String(d.weight).replace(".", ",") + " kg");
+  if (d.dims) spec.push("Dimensões da embalagem: " + d.dims.map(function(x){ return String(x).replace(".", ","); }).join(" x ") + " cm");
+  if (spec.length) parts.push("Especificações\n" + spec.join("\n"));
+  parts.push("Produto novo. Enviamos com nota fiscal.");
+  return parts.join("\n\n").slice(0, 5000);
+}
+
+function adProduct(){ return ad.id ? productById(ad.id) : null; }
+function adMissing(p){
+  var m = [];
+  if (!p.images || !p.images.length) m.push("foto");
+  if (!(p.title || "").trim()) m.push("título");
+  if (!(p.brand || "").trim()) m.push("marca");
+  if (!(p.model || "").trim()) m.push("modelo");
+  if (!(p.gtin || "").trim() && !p.gtinReason) m.push("EAN ou motivo");
+  if (feesBreakdown(p).profit <= 0) m.push("preço com lucro");
+  return m;
+}
+
+function openListingEditor(id, opts){
+  var p = productById(id);
+  if (!p) return;
+  opts = opts || {};
+  ad.id = id; ad.isNew = !!opts.isNew; ad.from = opts.from || "produtos"; ad.sel = 0;
+  if (!p.fees) p.fees = adDefaults();
+  if (!p.images) p.images = p.image ? [p.image] : [];
+  if (!p.title) p.title = p.name;
+  if (!p.supplierName) p.supplierName = p.name;
+  document.getElementById("ad-crumb-from").textContent = ad.from === "mineracao" ? "Mineração" : "Produtos";
+  document.getElementById("ad-cancel").textContent = ad.isNew ? "Cancelar" : "Voltar";
+  goToPage("anuncio");
+  renderListingEditor();
+  if (p.catalogId && !p.detail){
+    fetchCatalogDetail(p.catalogId).then(function(d){
+      if (!d) return;
+      applyCatalogDetail(p, d);
+      saveJSON(STORE_KEYS.products, state.products);
+      if (ad.id === p.id) renderListingEditor();
+    }).catch(function(){ /* sem detalhe: o lojista preenche */ });
+  }
+}
+
+function renderAdGallery(p){
+  var imgs = p.images || [];
+  if (ad.sel >= imgs.length) ad.sel = 0;
+  var tile = prodTileBg(p.category);
+  var main = document.getElementById("ad-main");
+  main.style.setProperty("--ad-tile", tile);
+  var src = imgs[ad.sel];
+  main.classList.toggle("is-empty", !src);
+  main.innerHTML = iconSVG(p.icon) + (src ? '<img src="'+escapeHtml(src)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add(\'is-empty\');this.remove()">' : '');
+  var acts = [];
+  if (imgs.length && ad.sel > 0) acts.push('<button type="button" data-ad-act="cover">Usar como capa</button>');
+  if (imgs.length > 1) acts.push('<button type="button" class="is-danger" data-ad-act="remove">Remover foto</button>');
+  if (!imgs.length) acts.push('<span class="sx-muted" style="font-size:12.5px">Sem fotos do fornecedor ainda</span>');
+  document.getElementById("ad-main-actions").innerHTML = acts.join("");
+  document.getElementById("ad-thumbs").innerHTML = imgs.map(function(u, i){
+    return '<button type="button" class="ad-thumb'+(i===ad.sel?' is-active':'')+'" draggable="true" data-thumb="'+i+'" style="--ad-tile:'+tile+'" aria-label="Foto '+(i+1)+'">' +
+      iconSVG(p.icon) + '<img src="'+escapeHtml(u)+'" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add(\'is-empty\');this.remove()">' +
+      (i===0 ? '<b>Capa</b>' : '') + '</button>';
+  }).join("");
+}
+function renderAdFinance(p){
+  var b = feesBreakdown(p);
+  document.getElementById("ad-sum").innerHTML =
+    '<div class="r"><span>Custo do produto</span><b>'+fmtBRL(b.cost)+'</b></div>' +
+    '<div class="r"><span>Comissão ('+fmtPctBR(b.f.commission)+')</span><b>− '+fmtBRL(b.commission)+'</b></div>' +
+    '<div class="r"><span>Taxa fixa</span><b>− '+fmtBRL(b.fixed)+'</b></div>' +
+    '<div class="r"><span>Antecipação ('+fmtPctBR(b.f.advance)+')</span><b>− '+fmtBRL(b.advance)+'</b></div>' +
+    '<div class="r total'+(b.profit<=0?' is-neg':'')+'"><span>Lucro estimado</span><b>'+fmtBRL(b.profit)+'</b></div>';
+  var priceEl = document.getElementById("ad-price");
+  if (document.activeElement !== priceEl) priceEl.value = (p.price || 0).toFixed(2);
+}
+function fmtPctBR(v){ return String(round2(v)).replace(".", ",") + "%"; }
+function renderAdChecks(p){
+  var m = adMissing(p);
+  var el = document.getElementById("ad-check");
+  el.className = "ad-bar__check " + (m.length ? "warn" : "ok");
+  el.textContent = m.length ? "Falta: " + m.join(", ") : "Tudo pronto para publicar";
+  ["brand","model"].forEach(function(k){
+    document.getElementById("ad-"+k).classList.toggle("is-missing", !(p[k]||"").trim());
+  });
+  var msg = document.getElementById("ad-gtin-msg");
+  if ((p.gtin||"").trim() && p.gtinAuto){ msg.className = "ad-gtin-msg ok"; msg.innerHTML = '<svg><use href="#check"/></svg>EAN encontrado automaticamente no fornecedor.'; }
+  else if ((p.gtin||"").trim()){ msg.className = "ad-gtin-msg ok"; msg.innerHTML = '<svg><use href="#check"/></svg>EAN informado.'; }
+  else if (p.gtinReason){ msg.className = "ad-gtin-msg ok"; msg.innerHTML = '<svg><use href="#check"/></svg>Sem EAN, com motivo informado.'; }
+  else { msg.className = "ad-gtin-msg warn"; msg.textContent = "Informe o EAN ou escolha o motivo de ele estar vazio."; }
+  var tl = (p.title||"").length;
+  document.getElementById("ad-title-count").textContent = tl;
+  document.getElementById("ad-title-count").parentNode.classList.toggle("is-full", tl >= 60);
+}
+function renderListingEditor(){
+  var p = adProduct();
+  if (!p) return;
+  renderAdGallery(p);
+  var set = function(id, v){ var el = document.getElementById(id); if (document.activeElement !== el) el.value = v == null ? "" : v; };
+  set("ad-category", p.category);
+  set("ad-title", p.title);
+  set("ad-desc", p.description || "");
+  set("ad-brand", p.brand);
+  set("ad-model", p.model);
+  set("ad-gtin", p.gtin);
+  set("ad-gtin-reason", p.gtinReason || "");
+  set("ad-sku", p.sku || "—");
+  set("ad-stock", fmtInt(p.stock) + " un.");
+  set("ad-commission", p.fees.commission);
+  set("ad-fixed", p.fees.fixedFee);
+  set("ad-advance", p.fees.advance);
+  set("ad-margin", p.fees.margin);
+  renderAdFinance(p);
+  renderAdChecks(p);
+}
+function adSaved(){
+  var el = document.getElementById("ad-saved");
+  el.classList.add("is-saving"); el.querySelector("span").textContent = "Salvando…";
+  clearTimeout(ad.saveTimer);
+  ad.saveTimer = setTimeout(function(){
+    saveJSON(STORE_KEYS.products, state.products);
+    el.classList.remove("is-saving"); el.querySelector("span").textContent = "Salvo automaticamente";
+  }, 400);
+}
+function adFieldChanged(el){
+  var p = adProduct(); if (!p) return;
+  var key = el.getAttribute("data-ad");
+  if (key){
+    p[key] = el.value;
+    if (key === "title") p.name = el.value.trim() || p.supplierName;
+    if (key === "gtin"){ p.gtin = el.value.replace(/\D/g, ""); p.gtinAuto = false; }
+    if (key === "category") p.category = el.value.trim() || p.category;
+  }
+  var fee = el.getAttribute("data-fee");
+  if (fee){
+    p.fees[fee] = Math.max(0, num(el.value));
+    p.price = priceForMargin(p.cost || 0, p.fees);
+    // lembra as taxas para os próximos produtos
+    if (fee === "commission") state.settings.mlCommission = p.fees.commission;
+    if (fee === "fixedFee") state.settings.mlFixedFee = p.fees.fixedFee;
+    if (fee === "advance") state.settings.mlAdvance = p.fees.advance;
+    saveJSON(STORE_KEYS.settings, state.settings);
+  }
+  if (el.id === "ad-price"){
+    p.price = Math.max(0, round2(num(el.value)));
+    var b = feesBreakdown(p);
+    p.fees.margin = p.price > 0 ? Math.round(b.profit / p.price * 1000) / 10 : 0;
+    document.getElementById("ad-margin").value = p.fees.margin;
+  }
+  p.margin = p.fees.margin;
+  renderAdFinance(p);
+  renderAdChecks(p);
+  adSaved();
+}
+function leaveListingEditor(discard){
+  var p = adProduct();
+  if (discard && p && ad.isNew){
+    state.products = state.products.filter(function(x){ return x.id !== p.id; });
+    toast("Produto descartado.");
+  }
+  saveJSON(STORE_KEYS.products, state.products);
+  var back = ad.from === "mineracao" ? "mineracao" : "produtos";
+  ad.id = null;
+  renderSideSummary();
+  goToPage(back);
+}
+function publishListing(){
+  var p = adProduct(); if (!p) return;
+  var m = adMissing(p);
+  if (m.length){ toast("Antes de publicar, preencha: " + m.join(", ") + ".", true); return; }
+  if (!ml.account){
+    p.status = "pronto"; saveJSON(STORE_KEYS.products, state.products);
+    toast("Anúncio salvo. Conecte sua conta do Mercado Livre para publicar.", true);
+    ad.isNew = false; ad.id = null;
+    goToPage("integracoes");
+    return;
+  }
+  p.status = "pronto";
+  saveJSON(STORE_KEYS.products, state.products);
+  toast("Anúncio pronto e salvo. O envio direto ao Mercado Livre será ativado em breve.");
+  ad.isNew = false;
+  leaveListingEditor(false);
+}
+function initListingEditor(){
+  var page = document.getElementById("page-anuncio");
+  page.addEventListener("input", function(e){
+    var el = e.target;
+    if (el.matches("[data-ad],[data-fee],#ad-price")) adFieldChanged(el);
+  });
+  page.addEventListener("change", function(e){
+    if (e.target.matches("select[data-ad]")) adFieldChanged(e.target);
+    if (e.target.id === "ad-price"){ var p = adProduct(); if (p) e.target.value = (p.price||0).toFixed(2); }
+  });
+  page.addEventListener("click", function(e){
+    var p = adProduct(); if (!p) return;
+    var gen = e.target.closest("[data-gen]");
+    if (gen){
+      if (gen.getAttribute("data-gen") === "title"){ p.title = suggestTitle(p); p.name = p.title; }
+      else p.description = suggestDescription(p);
+      renderListingEditor(); adSaved(); return;
+    }
+    var th = e.target.closest("[data-thumb]");
+    if (th){ ad.sel = +th.getAttribute("data-thumb"); renderAdGallery(p); return; }
+    var act = e.target.closest("[data-ad-act]");
+    if (act){
+      var a = act.getAttribute("data-ad-act");
+      if (a === "cover"){ var img = p.images.splice(ad.sel, 1)[0]; p.images.unshift(img); ad.sel = 0; }
+      if (a === "remove" && p.images.length > 1){ p.images.splice(ad.sel, 1); ad.sel = Math.max(0, ad.sel - 1); }
+      p.image = p.images[0] || null;
+      renderAdGallery(p); renderAdChecks(p); adSaved();
+    }
+  });
+  var thumbs = document.getElementById("ad-thumbs");
+  thumbs.addEventListener("dragstart", function(e){
+    var th = e.target.closest("[data-thumb]"); if (!th) return;
+    ad.dragFrom = +th.getAttribute("data-thumb"); th.classList.add("is-drag");
+    try{ e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(ad.dragFrom)); }catch(err){}
+  });
+  thumbs.addEventListener("dragover", function(e){
+    var th = e.target.closest("[data-thumb]"); if (!th || ad.dragFrom == null) return;
+    e.preventDefault();
+    thumbs.querySelectorAll(".is-over").forEach(function(x){ x.classList.remove("is-over"); });
+    th.classList.add("is-over");
+  });
+  thumbs.addEventListener("drop", function(e){
+    var th = e.target.closest("[data-thumb]"); var p = adProduct();
+    if (!th || !p || ad.dragFrom == null) return;
+    e.preventDefault();
+    var to = +th.getAttribute("data-thumb");
+    var img = p.images.splice(ad.dragFrom, 1)[0];
+    p.images.splice(to, 0, img);
+    p.image = p.images[0] || null;
+    ad.sel = to; ad.dragFrom = null;
+    renderAdGallery(p); adSaved();
+  });
+  thumbs.addEventListener("dragend", function(){
+    ad.dragFrom = null;
+    thumbs.querySelectorAll(".is-drag,.is-over").forEach(function(x){ x.classList.remove("is-drag","is-over"); });
+  });
+  document.getElementById("ad-back").addEventListener("click", function(){ leaveListingEditor(false); });
+  document.getElementById("ad-crumb-from").addEventListener("click", function(e){ e.preventDefault(); leaveListingEditor(false); });
+  document.getElementById("ad-cancel").addEventListener("click", function(){
+    if (ad.isNew && !window.confirm("Descartar este produto? Ele não será adicionado aos seus produtos.")) return;
+    leaveListingEditor(ad.isNew);
+  });
+  document.getElementById("ad-publish").addEventListener("click", publishListing);
+}
+
 function syncMiningViewButtons(){
   document.getElementById("mining-view-grid").setAttribute("data-active", state.mining.view==="grid");
   document.getElementById("mining-view-list").setAttribute("data-active", state.mining.view==="list");
@@ -1268,6 +1623,7 @@ function goToPage(name, keepScroll){
   if (name==="pedidos"){ renderVendasDashboard(); renderPedidos(); }
   if (name==="integracoes") renderIntegracoes();
   if (name==="config") renderConfig();
+  if (name==="anuncio") renderListingEditor();
   if (!keepScroll) window.scrollTo({top:0, behavior:"smooth"});
 }
 
@@ -1319,7 +1675,17 @@ function init(){
   document.getElementById("produtos-grid").addEventListener("click", function(e){
     var editBtn = e.target.closest("[data-edit]");
     var delBtn = e.target.closest("[data-delete]");
-    if (editBtn) openProductModal(editBtn.getAttribute("data-edit"));
+    if (editBtn){
+      var ep = productById(editBtn.getAttribute("data-edit"));
+      if (ep && ep.catalogId) openListingEditor(ep.id, { from: "produtos" });
+      else openProductModal(editBtn.getAttribute("data-edit"));
+      return;
+    }
+    var openCard = e.target.closest(".product-card");
+    if (openCard && !delBtn){
+      var cp = productById(openCard.getAttribute("data-product"));
+      if (cp && cp.catalogId) openListingEditor(cp.id, { from: "produtos" });
+    }
     if (delBtn) deleteProduct(delBtn.getAttribute("data-delete"));
   });
 
@@ -1394,6 +1760,7 @@ function init(){
   document.getElementById("btn-logout").addEventListener("click", logout);
 
   document.getElementById("config-form").addEventListener("submit", saveConfig);
+  initListingEditor();
 
   renderPainel();
 }

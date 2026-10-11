@@ -368,6 +368,106 @@
       </div>
     </section>
 
+    <!-- ===================== PREPARAR ANÚNCIO ===================== -->
+    <section id="page-anuncio" class="page">
+      <div class="ad-top">
+        <button class="icon-btn ad-back" id="ad-back" type="button" aria-label="Voltar"><svg><use href="#arrow"/></svg></button>
+        <nav class="ad-crumb"><a href="#" id="ad-crumb-from">Mineração</a><span>/</span><b>Preparar anúncio</b></nav>
+        <span class="ad-saved" id="ad-saved"><i></i><span>Salvo automaticamente</span></span>
+      </div>
+
+      <div class="ad-grid">
+        <!-- fotos -->
+        <div class="sx-card ad-gallery">
+          <div class="ad-main" id="ad-main"></div>
+          <div class="ad-main-actions" id="ad-main-actions"></div>
+          <div class="ad-thumbs" id="ad-thumbs"></div>
+          <p class="sx-muted ad-hint">Arraste as fotos para reorganizar; a primeira será a capa do anúncio.</p>
+        </div>
+
+        <!-- dados do anúncio -->
+        <div class="sx-card ad-form">
+          <div class="ad-two">
+            <div class="ad-box">
+              <label class="sx-label" for="ad-market">Marketplace</label>
+              <div class="ad-select-ico"><img src="assets/ml.png" alt="">
+                <select class="sx-select" id="ad-market">
+                  <option value="ml">Mercado Livre</option>
+                  <option value="shopee" disabled>Shopee (em breve)</option>
+                  <option value="amazon" disabled>Amazon (em breve)</option>
+                  <option value="shein" disabled>Shein (em breve)</option>
+                </select>
+              </div>
+            </div>
+            <div class="ad-box">
+              <label class="sx-label" for="ad-category">Categoria</label>
+              <input class="sx-input" id="ad-category" data-ad="category" placeholder="Categoria do produto">
+            </div>
+          </div>
+
+          <div class="ad-field">
+            <div class="ad-field__head"><label class="sx-label" for="ad-title">Título</label>
+              <button type="button" class="ad-gen" data-gen="title"><svg><use href="#star"/></svg>Gerar sugestão</button></div>
+            <input class="sx-input" id="ad-title" data-ad="title" maxlength="60" placeholder="Nome do produto como aparece no anúncio">
+            <div class="ad-count"><span id="ad-title-count">0</span>/60</div>
+          </div>
+
+          <div class="ad-field">
+            <div class="ad-field__head"><label class="sx-label" for="ad-desc">Descrição</label>
+              <button type="button" class="ad-gen" data-gen="desc"><svg><use href="#star"/></svg>Gerar sugestão</button></div>
+            <textarea class="sx-textarea" id="ad-desc" data-ad="description" rows="9" placeholder="Descreva o produto para o comprador"></textarea>
+          </div>
+
+          <div class="ad-attrs">
+            <div class="ad-attrs__head"><svg><use href="#filter"/></svg>Atributos obrigatórios</div>
+            <div class="ad-two">
+              <div><label class="sx-label" for="ad-brand">Marca <em>*</em></label><input class="sx-input" id="ad-brand" data-ad="brand" placeholder="Ex.: Genérica"></div>
+              <div><label class="sx-label" for="ad-model">Modelo <em>*</em></label><input class="sx-input" id="ad-model" data-ad="model" placeholder="Ex.: KA-6375"></div>
+              <div><label class="sx-label" for="ad-gtin">Código universal (EAN) <small>se houver</small></label><input class="sx-input" id="ad-gtin" data-ad="gtin" inputmode="numeric" placeholder="Ex.: 7891234567890"></div>
+              <div><label class="sx-label" for="ad-gtin-reason">Motivo do EAN vazio <small>se houver</small></label>
+                <select class="sx-select" id="ad-gtin-reason" data-ad="gtinReason">
+                  <option value="">Selecione</option>
+                  <option value="no_code">O produto não tem código cadastrado</option>
+                  <option value="kit">É um kit</option>
+                  <option value="handmade">É artesanal</option>
+                </select>
+              </div>
+              <div><label class="sx-label" for="ad-sku">SKU</label><input class="sx-input" id="ad-sku" readonly></div>
+              <div><label class="sx-label" for="ad-stock">Estoque no fornecedor</label><input class="sx-input" id="ad-stock" readonly></div>
+            </div>
+            <p class="ad-gtin-msg" id="ad-gtin-msg"></p>
+          </div>
+        </div>
+
+        <!-- taxas e resumo -->
+        <div class="sx-card ad-fin">
+          <h3 class="ad-h">Taxas e margem</h3>
+          <div class="ad-two ad-fees">
+            <div class="ad-box"><label class="sx-label" for="ad-commission">Comissão (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-commission" data-fee="commission" type="number" min="0" max="60" step="0.01"><span>%</span></div></div>
+            <div class="ad-box"><label class="sx-label" for="ad-fixed">Taxa fixa (R$)</label><div class="ad-suffix"><input class="sx-input" id="ad-fixed" data-fee="fixedFee" type="number" min="0" step="0.01"><span>R$</span></div></div>
+            <div class="ad-box"><label class="sx-label" for="ad-advance">Antecipação (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-advance" data-fee="advance" type="number" min="0" max="30" step="0.01"><span>%</span></div></div>
+            <div class="ad-box"><label class="sx-label" for="ad-margin">Margem (%)</label><div class="ad-suffix"><input class="sx-input" id="ad-margin" data-fee="margin" type="number" min="0" max="80" step="0.1"><span>%</span></div></div>
+          </div>
+          <h3 class="ad-h" style="margin-top:22px">Resumo financeiro</h3>
+          <div class="ad-sum" id="ad-sum"></div>
+          <div class="ad-price">
+            <label for="ad-price">Preço de venda ao comprador</label>
+            <div class="ad-price__input"><span>R$</span><input id="ad-price" type="number" min="0" step="0.01"></div>
+          </div>
+          <p class="sx-muted ad-note">As taxas variam por categoria e tipo de anúncio no Mercado Livre. Ajuste se precisar; o Sellex lembra os valores para os próximos produtos.</p>
+        </div>
+      </div>
+
+      <div class="ad-bar">
+        <div class="ad-bar__where">Publicando em <img src="assets/ml.png" alt=""><b>Mercado Livre</b></div>
+        <span class="ad-bar__check" id="ad-check"></span>
+        <div class="ad-bar__actions">
+          <button type="button" class="ad-cancel" id="ad-cancel">Cancelar</button>
+          <button type="button" class="sx-btn" id="ad-publish">Publicar produto</button>
+        </div>
+      </div>
+    </section>
+
   </main>
 </div>
 
