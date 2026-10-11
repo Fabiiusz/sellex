@@ -407,4 +407,5 @@ main{padding-bottom:0}
   .addr-head{flex-wrap:wrap}
   .addr-copy--all{width:100%;justify-content:center}
 }
-.int-head .sx-badge{white-space:nowrap;flex-shrink:0}.int-head .int-name{line-height:1.2}
+
+.int-title{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px}.int-title .int-name{line-height:1.2}.int-title .sx-badge{white-space:nowrap}

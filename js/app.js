@@ -1843,14 +1843,14 @@ function renderIntegracoes(){
     : '<span class="sx-badge"><i class="sx-dot"></i>Não conectado</span>';
   var others = [["shopee","Shopee"],["amazon","Amazon"],["shein","Shein"]].map(function(c){
     return '<div class="sx-card int-card">' +
-      '<div class="int-head"><img class="int-logo" src="'+CH_ICON[c[0]]+'" alt=""><div style="flex:1"><div class="int-name">'+c[1]+'</div></div><span class="sx-badge"><i class="sx-dot"></i>Não conectado</span></div>' +
+      '<div class="int-head"><img class="int-logo" src="'+CH_ICON[c[0]]+'" alt=""><div class="int-title"><div class="int-name">'+c[1]+'</div><span class="sx-badge"><i class="sx-dot"></i>Não conectado</span></div></div>' +
       '<p class="int-desc"><span class="int-avail">Já disponível para integração.</span> Conecte sua conta da '+c[1]+' para publicar seus produtos e receber os pedidos aqui.</p>' +
       '<div class="int-actions"><button class="sx-btn" type="button" data-int="other" data-int-name="'+c[1]+'"><svg><use href="#plug"/></svg>Conectar '+c[1]+'</button></div>' +
     '</div>';
   }).join("");
   host.innerHTML =
     '<div class="sx-card int-card">' +
-      '<div class="int-head"><img class="int-logo" src="'+CH_ICON.ml+'" alt=""><div style="flex:1"><div class="int-name">Mercado Livre</div></div>'+badge+'</div>' +
+      '<div class="int-head"><img class="int-logo" src="'+CH_ICON.ml+'" alt=""><div class="int-title"><div class="int-name">Mercado Livre</div>'+badge+'</div></div>' +
       mlCard +
     '</div>' + others;
 
