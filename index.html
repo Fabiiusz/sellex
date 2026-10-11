@@ -28,6 +28,7 @@
   <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.9-5.4M20 12a8 8 0 0 1-13.9 5.4M17 4v4h-4M7 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+  <symbol id="flame" viewBox="0 0 24 24"><path d="M12 22c4 0 7-2.7 7-6.6 0-3.2-2-5.3-3.4-7.1-.4 1.6-1.3 2.7-2.4 3.2.4-3.4-.9-6.6-4.2-8.5.3 3-1.2 5-2.7 6.8C4.9 11.5 5 13.6 5 15.4 5 19.3 8 22 12 22Z" fill="currentColor"/><path d="M12 22c-1.9 0-3.2-1.3-3.2-3.1 0-1.7 1.2-2.6 2-3.6.2 1 .8 1.6 1.5 1.8 0-1.5.7-2.6 1.8-3.4.1 1.6 1.1 2.4 1.1 4.6 0 2.1-1.3 3.7-3.2 3.7Z" fill="#FFE9A8"/></symbol>
   <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor" stroke="currentColor" stroke-width="1"/></symbol>
   <symbol id="filter" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.4V19l-3.6 1.8v-8.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
@@ -221,6 +222,7 @@
 
             <div class="filter-group">
               <h3>Disponibilidade</h3>
+              <label class="filter-check filter-check--hot"><input type="checkbox" data-mfilter="onlyTrending"><svg><use href="#flame"/></svg>Em alta da semana</label>
               <label class="filter-check"><input type="checkbox" data-mfilter="inStock" checked>Só com estoque</label>
               <label class="filter-check"><input type="checkbox" data-mfilter="withGtin">Com código de barras (GTIN)</label>
               <label class="filter-check"><input type="checkbox" data-mfilter="notImported">Ainda não importados</label>
@@ -248,11 +250,13 @@
         </aside>
 
         <div>
+          <section class="trend" id="mining-trending" hidden></section>
           <div class="mining-toolbar">
             <span class="count" id="mining-count"></span>
             <div class="spacer"></div>
             <select class="sx-select" id="mining-sort" style="width:auto">
               <option value="recent">Mais recentes</option>
+              <option value="hot">Em alta da semana</option>
               <option value="price-asc">Menor custo</option>
               <option value="price-desc">Maior custo</option>
               <option value="stock">Mais estoque</option>

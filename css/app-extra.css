@@ -409,3 +409,20 @@ main{padding-bottom:0}
 }
 
 .int-title{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px}.int-title .int-name{line-height:1.2}.int-title .sx-badge{white-space:nowrap}
+
+/* em alta da semana (mineração) */
+.mining-badge--hot{display:inline-flex;align-items:center;gap:4px;color:#fff;background:linear-gradient(135deg,#FF6A3D,#E0473E);border-color:rgba(255,190,160,.6);box-shadow:0 6px 16px -6px rgba(255,106,61,.8)}
+.mining-badge--hot svg{width:11px;height:11px;color:#FFE9A8}
+.mining-card.is-hot{border-color:rgba(255,138,90,.45)}
+.mining-hot-line{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:#FFA27A}
+.mining-hot-line svg{width:13px;height:13px;color:#FF7A45}
+.filter-check--hot svg{width:14px;height:14px;color:#FF7A45;margin-right:-2px}
+.trend{margin-bottom:22px;padding:18px;border-radius:var(--sx-r-lg);border:1px solid rgba(255,138,90,.28);background:linear-gradient(135deg,rgba(255,106,61,.08),rgba(61,90,241,.04) 60%,transparent)}
+.trend-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.trend-head h2{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:500;margin:0}
+.trend-head h2 svg{width:20px;height:20px;color:#FF7A45}
+.trend-head p{margin:3px 0 0;font-size:13px}
+.trend-row{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(230px,250px);gap:14px;overflow-x:auto;padding-bottom:8px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.trend-row .mining-card{scroll-snap-align:start}
+@media (max-width:560px){.trend{padding:14px}.trend-row{grid-auto-columns:78%}}
+.mining-layout>*{min-width:0}.trend{min-width:0}.mining-hot-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mining-hot-line b{color:#fff;font-weight:600}
