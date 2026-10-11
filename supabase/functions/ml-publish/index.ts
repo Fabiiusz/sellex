@@ -20,8 +20,10 @@ const CORS = {
 };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const fail = (step: string, error: string, message: string, causes: string[] = []) =>
-  json({ ok: false, step, error, message, causes });
+const fail = (step: string, error: string, message: string, causes: string[] = []) => {
+  console.log("ml-publish: falhou", JSON.stringify({ step, error, causes }));
+  return json({ ok: false, step, error, message, causes });
+};
 
 const GTIN_REASON: Record<string, string> = {
   no_code: "O produto não tem código cadastrado",
@@ -60,11 +62,33 @@ async function accessToken(userId: string): Promise<string | null> {
   return tok.access_token;
 }
 
+// Motivos de recusa do ML traduzidos, com o que o lojista precisa fazer
+const KNOWN: Record<string, string> = {
+  address_pending: "Sua conta do Mercado Livre ainda não tem endereço cadastrado. Entre no Mercado Livre > Meu perfil > Endereços e cadastre um (pode usar o endereço do fornecedor, em Integrações).",
+  phone_pending: "Sua conta do Mercado Livre precisa de um telefone confirmado. Cadastre em Meu perfil > Dados pessoais.",
+  identification_pending: "O Mercado Livre pede que você confirme seus dados (CPF/CNPJ) antes de anunciar.",
+  "seller.unable_to_list": "Sua conta do Mercado Livre está impedida de anunciar no momento.",
+  "item.price.invalid": "O preço não é aceito pelo Mercado Livre nessa categoria.",
+  "item.title.length.invalid": "O título passou do limite de letras da categoria.",
+  "item.pictures.invalid": "O Mercado Livre não conseguiu baixar as fotos do produto.",
+  "item.attributes.missing_required": "A categoria exige atributos que não foram preenchidos.",
+  "item.category_id.invalid": "A categoria sugerida não aceita anúncios diretos.",
+  "item.listing_type_id.invalid": "O tipo de anúncio não é aceito para esta conta.",
+  "seller.shipping_mode.not_supported": "A forma de envio da sua conta não é aceita nesta categoria.",
+};
 function mlCauses(body: any): string[] {
+  const out: string[] = [];
+  const add = (code?: string, msg?: string) => {
+    const k = String(code ?? "").trim();
+    const t = KNOWN[k] ?? (msg ? String(msg) : k);
+    if (t && !out.includes(t)) out.push(t);
+  };
   const list = Array.isArray(body?.cause) ? body.cause : [];
-  const out = list.filter((c: any) => c && c.type !== "warning")
-    .map((c: any) => String(c.message || c.code || "")).filter(Boolean);
-  if (!out.length && body?.message) out.push(String(body.message));
+  for (const c of list) {
+    if (typeof c === "string") add(c);
+    else if (c && c.type !== "warning") add(c.code, c.message);
+  }
+  if (!out.length) add(body?.message, body?.error);
   return out.slice(0, 6);
 }
 
@@ -110,6 +134,16 @@ Deno.serve(async (req: Request) => {
   const token = await accessToken(userId);
   if (!token) return fail("integration", "ml_expired", "A conexão com o Mercado Livre expirou. Conecte de novo em Integrações.");
   const H = { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" };
+
+  // A conta pode anunciar? (o ML bloqueia, por exemplo, contas sem endereço cadastrado)
+  const me = await fetch(`${ML}/users/me`, { headers: H, signal: AbortSignal.timeout(15_000) })
+    .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  if (me?.status?.list && me.status.list.allow === false) {
+    const codes: string[] = Array.isArray(me.status.list.codes) ? me.status.list.codes : [];
+    return fail("integration", "seller_cannot_list",
+      "Sua conta do Mercado Livre ainda não pode anunciar.",
+      mlCauses({ cause: codes.length ? codes : ["seller.unable_to_list"] }));
+  }
 
   // Categoria sugerida pelo próprio ML a partir do título
   const disc = await fetch(`${ML}/sites/MLB/domain_discovery/search?limit=1&q=${encodeURIComponent(title)}`, {
@@ -158,10 +192,13 @@ Deno.serve(async (req: Request) => {
   if (!res.ok || !res.body?.id) {
     console.error("ml-publish: ML recusou", res.status, JSON.stringify(res.body)?.slice(0, 800));
     return fail("publish", "ml_rejected",
-      res.status === 0 ? "O Mercado Livre não respondeu. Tente de novo em instantes." : "O Mercado Livre recusou o anúncio.",
+      res.status === 0 ? "O Mercado Livre não respondeu. Tente de novo em instantes."
+        : res.status === 403 ? "O Mercado Livre não deixou sua conta publicar agora."
+        : "O Mercado Livre recusou o anúncio.",
       mlCauses(res.body));
   }
   const itemId = String(res.body.id);
+  console.log("ml-publish: publicado", JSON.stringify({ itemId, status: res.body.status, categoryId }));
 
   // Descrição (texto simples). Se falhar, o anúncio continua publicado.
   let descriptionSaved = true;

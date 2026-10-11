@@ -1088,7 +1088,7 @@ var PUB_STEPS = [
 var pub = { running: false };
 // MODO TESTE: true = simula a publicação (não envia nada ao Mercado Livre e não exige conta conectada).
 // Para publicar de verdade, troque para false.
-var PUBLISH_TEST_MODE = true;
+var PUBLISH_TEST_MODE = false;
 function wait(ms){ return new Promise(function(r){ setTimeout(r, ms); }); }
 function pubRender(stateByKey, finalOk){
   document.getElementById("pub-steps").innerHTML = PUB_STEPS.map(function(s, i){
@@ -1134,6 +1134,8 @@ function pubFail(states, key, message, opts){
   document.getElementById("pub-result").innerHTML =
     '<p class="pub-msg">'+escapeHtml(message)+'</p>' +
     (causes.length ? '<ul class="pub-causes">'+causes.map(function(c){ return '<li>'+escapeHtml(c)+'</li>'; }).join("")+'</ul>' : '') +
+    (opts.address ? '<div class="pub-addr"><span>Endereço do fornecedor:</span><b>'+escapeHtml(supplierAddressText())+'</b>' +
+      '<button type="button" class="addr-copy" data-pub="copy-address"><svg><use href="#copy"/></svg><span>Copiar endereço</span></button></div>' : '') +
     '<div class="pub-actions">' +
       '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pub="close">'+(opts.fix ? 'Corrigir' : 'Fechar')+'</button>' +
       (opts.connect ? '<button type="button" class="sx-btn sx-btn--sm" data-pub="connect">Conectar Mercado Livre</button>'
@@ -1222,7 +1224,8 @@ function runPublish(p){
         var key = r && PUB_STEPS.some(function(s){ return s.key === r.step; }) ? r.step : "publish";
         PUB_STEPS.forEach(function(s, i){ if (i >= PUB_STEPS.findIndex(function(x){ return x.key === key; })) delete states[s.key]; });
         pubFail(states, key, (r && r.message) || "O Mercado Livre não aceitou o anúncio.", {
-          causes: r && r.causes, connect: r && /ml_not_connected|ml_expired/.test(r.error || ""), retry: !(r && r.error === "ml_rejected"), fix: r && r.error === "ml_rejected"
+          causes: r && r.causes, connect: r && /ml_not_connected|ml_expired/.test(r.error || ""), retry: !(r && r.error === "ml_rejected"), fix: r && r.error === "ml_rejected",
+          address: r && (r.causes || []).some(function(c){ return /endereço/i.test(c); })
         });
         stop();
       }
@@ -1241,6 +1244,7 @@ function runPublish(p){
         '<div class="pub-success"><div class="pub-success__ico"><svg><use href="#check"/></svg></div>' +
         '<h3>Produto publicado!</h3>' +
         '<p class="pub-msg">Anúncio <b>'+escapeHtml(r.id)+'</b> criado no Mercado Livre por <b>'+fmtBRL(p.price)+'</b>.' +
+          (r.status && r.status !== "active" ? ' Situação no Mercado Livre: <b>'+escapeHtml(({under_review:"em revisão",paused:"pausado",not_yet_active:"aguardando ativação",inactive:"inativo",closed:"finalizado"})[r.status] || r.status)+'</b>.' : '') +
           (r.description_saved === false ? ' A descrição não foi aceita; você pode ajustá-la direto no Mercado Livre.' : '') + '</p>' +
         '<div class="pub-actions" style="justify-content:center">' +
           (p.mlPermalink ? '<a class="sx-btn sx-btn--ghost sx-btn--sm" href="'+escapeHtml(p.mlPermalink)+'" target="_blank" rel="noopener">Ver anúncio</a>' : '') +
@@ -1521,6 +1525,7 @@ function initListingEditor(){
     var a = b.getAttribute("data-pub");
     var p = productById(pub.productId);
     if (a === "close"){ pubClose(); return; }
+    if (a === "copy-address"){ copyText(supplierAddressText()).then(function(){ flashCopied(b); }).catch(function(){ toast("Não consegui copiar.", true); }); return; }
     if (a === "retry" && p){ pubClose(); runPublish(p); return; }
     if (a === "connect"){ pubClose(); goToPage("integracoes"); return; }
     if (a === "done") pubFinish();
@@ -2250,6 +2255,12 @@ function loadUserState(uid){
   STORE_KEYS.settings = "sx_settings_v3:" + uid;
   var savedProducts = loadJSON(STORE_KEYS.products, null);
   state.products = Array.isArray(savedProducts) ? savedProducts : [];
+  // produtos "publicados" no modo teste voltam a ficar prontos para publicar de verdade
+  var released = false;
+  state.products.forEach(function(p){
+    if (p.testPublish){ delete p.mlItemId; delete p.mlPermalink; delete p.publishedAt; p.status = "pronto"; p.testPublish = false; released = true; }
+  });
+  if (released) saveJSON(STORE_KEYS.products, state.products);
   state.settings = loadJSON(STORE_KEYS.settings, null) || defaultSettings();
   if (!state.settings.lastSync) state.settings.lastSync = defaultSettings().lastSync;
   if (!state.settings.c7Tier) state.settings.c7Tier = "DROPSHIPPING";
