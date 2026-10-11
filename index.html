@@ -27,6 +27,7 @@
   <symbol id="trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.9-5.4M20 12a8 8 0 0 1-13.9 5.4M17 4v4h-4M7 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
   <symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="star" viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" fill="currentColor" stroke="currentColor" stroke-width="1"/></symbol>
   <symbol id="filter" viewBox="0 0 24 24"><path d="M4 5h16l-6.2 7.4V19l-3.6 1.8v-8.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
@@ -205,7 +206,7 @@
     <!-- ===================== MINERAÇÃO DE PRODUTOS ===================== -->
     <section id="page-mineracao" class="page">
       <div class="page-head">
-        <div><h1 class="sx-title">Mineração de produtos</h1><p class="sx-muted">Catálogo do fornecedor C7 Drop, atualizado automaticamente. Importe para vender.</p></div>
+        <div><h1 class="sx-title">Mineração de produtos</h1><p class="sx-muted">Catálogo do fornecedor, atualizado automaticamente. Importe para vender.</p></div>
         <span class="sx-badge" id="catalog-status"><i class="sx-dot"></i>Carregando catálogo…</span>
       </div>
 
@@ -330,12 +331,19 @@
     <!-- ===================== LOJAS ===================== -->
     <section id="page-integracoes" class="page">
       <div class="page-head">
-        <div><h1 class="sx-title">Integrações</h1><p class="sx-muted">Conecte suas contas de marketplace e seu fornecedor. Cada conexão é só sua.</p></div>
+        <div><h1 class="sx-title">Integrações</h1><p class="sx-muted">Conecte suas contas de marketplace. Cada conexão é só sua.</p></div>
       </div>
       <h2 class="int-section">Marketplaces</h2>
       <div class="int-grid" id="int-marketplaces"></div>
-      <h2 class="int-section">Fornecedores</h2>
-      <div class="int-grid" id="int-suppliers"></div>
+      <h2 class="int-section">Fornecedor</h2>
+      <div class="sx-card addr" id="int-address">
+        <div class="addr-head">
+          <span class="addr-ico"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="9.5" r="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></span>
+          <div class="addr-head__txt"><b>Endereço do fornecedor (use na sua loja)</b><span>Cadastre como endereço de retirada/origem no marketplace.</span></div>
+          <button type="button" class="addr-copy addr-copy--all" data-copy-all><svg><use href="#copy"/></svg><span>Copiar tudo</span></button>
+        </div>
+        <div class="addr-grid" id="addr-grid"></div>
+      </div>
     </section>
 
     <!-- ===================== CONFIGURAÇÕES ===================== -->
@@ -356,7 +364,7 @@
           <label class="row between"><span>Reajuste automático de preço</span><input type="checkbox" class="sx-switch" id="cfg-autoprice"></label>
           <label class="row between"><span>Notificar por e-mail</span><input type="checkbox" class="sx-switch" id="cfg-notify"></label>
           <div><label class="sx-label" for="cfg-margin">Margem padrão (%)</label><input id="cfg-margin" class="sx-input" type="number" min="0" max="85" step="1"><p class="sx-muted" style="font-size:12.5px;margin:6px 0 0">Usada para sugerir o preço de venda: custo ÷ (1 − margem).</p></div>
-          <div><label class="sx-label" for="cfg-tier">Sua faixa de preço no C7 Drop</label>
+          <div><label class="sx-label" for="cfg-tier">Sua faixa de preço no fornecedor</label>
             <select class="sx-select" id="cfg-tier">
               <option value="DROPSHIPPING">Dropshipping</option>
               <option value="ATACADO">Atacado</option>

@@ -445,7 +445,7 @@ function renderProdutosGrid(){
   if (!withSales.length){
     grid.innerHTML = '<div class="empty" style="grid-column:1/-1">' + (state.products.length
       ? 'Nenhum produto encontrado.'
-      : (catalog.loaded ? 'Você ainda não tem produtos. <a href="#" data-goto="mineracao" style="color:var(--sx-blue-light)">Escolha produtos na Mineração</a>.' : 'Carregando seus produtos do C7 Drop…')) + '</div>';
+      : (catalog.loaded ? 'Você ainda não tem produtos. <a href="#" data-goto="mineracao" style="color:var(--sx-blue-light)">Escolha produtos na Mineração</a>.' : 'Carregando seus produtos do fornecedor…')) + '</div>';
     return;
   }
 
@@ -498,7 +498,7 @@ function updateModalCostHint(){
   marginEl.readOnly = true;
   marginEl.value = price > 0 ? Math.round(lucro / price * 1000) / 10 : 0;
   hint.style.display = "";
-  hint.innerHTML = 'Custo no C7 Drop: <b>'+fmtBRL(p.cost)+'</b> · lucro de <b'+(lucro<0?' style="color:var(--sx-red)"':'')+'>'+fmtBRL(lucro)+'</b> por unidade. A margem é calculada pelo preço; o estoque vem do fornecedor.';
+  hint.innerHTML = 'Custo no fornecedor: <b>'+fmtBRL(p.cost)+'</b> · lucro de <b'+(lucro<0?' style="color:var(--sx-red)"':'')+'>'+fmtBRL(lucro)+'</b> por unidade. A margem é calculada pelo preço; o estoque vem do fornecedor.';
 }
 function openProductModal(id){
   state.editingProductId = id || null;
@@ -647,7 +647,7 @@ function setCatalogStatus(kind){
   else if (kind==="ok"){
     var inStock = catalog.items.filter(function(r){ return r.stock>0; }).length;
     el.className = "sx-badge sx-badge--success";
-    el.innerHTML = '<i class="sx-dot"></i>C7 Drop conectado · '+fmtInt(catalog.items.length)+' produtos · '+fmtInt(inStock)+' com estoque';
+    el.innerHTML = '<i class="sx-dot"></i>Fornecedor conectado · '+fmtInt(catalog.items.length)+' produtos · '+fmtInt(inStock)+' com estoque';
   } else { el.className = "sx-badge sx-badge--danger"; el.innerHTML = '<i class="sx-dot"></i>Não foi possível carregar o catálogo'; }
 }
 function fillCategorySelect(){
@@ -713,7 +713,7 @@ function renderMining(){
     document.getElementById("mining-count").textContent = "";
     grid.innerHTML = catalog.error
       ? '<div class="empty" style="grid-column:1/-1">Não consegui carregar o catálogo do fornecedor agora. Verifique sua conexão e <a href="#" id="catalog-retry" style="color:var(--sx-blue-light)">tente de novo</a>.</div>'
-      : '<div class="empty" style="grid-column:1/-1">Carregando o catálogo do C7 Drop…</div>';
+      : '<div class="empty" style="grid-column:1/-1">Carregando o catálogo do fornecedor…</div>';
     return;
   }
   var imported = importedCatalogIds();
@@ -1841,35 +1841,60 @@ function renderIntegracoes(){
   var badge = ml.account
     ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Conectado</span>'
     : '<span class="sx-badge"><i class="sx-dot"></i>Não conectado</span>';
-  var soon = [["shopee","Shopee"],["amazon","Amazon"],["shein","Shein"]].map(function(c){
-    return '<div class="sx-card int-card is-soon">' +
-      '<div class="int-head"><img class="int-logo" src="'+CH_ICON[c[0]]+'" alt=""><div style="flex:1"><div class="int-name">'+c[1]+'</div></div><span class="sx-badge"><i class="sx-dot"></i>Em breve</span></div>' +
-      '<p class="int-desc">Integração em desenvolvimento.</p>' +
+  var others = [["shopee","Shopee"],["amazon","Amazon"],["shein","Shein"]].map(function(c){
+    return '<div class="sx-card int-card">' +
+      '<div class="int-head"><img class="int-logo" src="'+CH_ICON[c[0]]+'" alt=""><div style="flex:1"><div class="int-name">'+c[1]+'</div></div><span class="sx-badge"><i class="sx-dot"></i>Não conectado</span></div>' +
+      '<p class="int-desc"><span class="int-avail">Já disponível para integração.</span> Conecte sua conta da '+c[1]+' para publicar seus produtos e receber os pedidos aqui.</p>' +
+      '<div class="int-actions"><button class="sx-btn" type="button" data-int="other" data-int-name="'+c[1]+'"><svg><use href="#plug"/></svg>Conectar '+c[1]+'</button></div>' +
     '</div>';
   }).join("");
   host.innerHTML =
     '<div class="sx-card int-card">' +
       '<div class="int-head"><img class="int-logo" src="'+CH_ICON.ml+'" alt=""><div style="flex:1"><div class="int-name">Mercado Livre</div></div>'+badge+'</div>' +
       mlCard +
-    '</div>' + soon;
+    '</div>' + others;
 
-  var c7;
-  if (catalog.loaded){
-    var inStock = catalog.items.filter(function(r){ return r.stock > 0; }).length;
-    var last = catalog.items.reduce(function(m,r){ return r.list_synced_at && r.list_synced_at > m ? r.list_synced_at : m; }, "");
-    c7 = '<div class="int-meta"><span><b>'+fmtInt(catalog.items.length)+'</b> produtos no catálogo · <b>'+fmtInt(inStock)+'</b> com estoque</span>' +
-      (last ? '<span>Atualizado em '+escapeHtml(fmtDateBR(last))+'</span>' : '') +
-      '<span>Sua faixa: <b>'+escapeHtml(({DROPSHIPPING:"Dropshipping",ATACADO:"Atacado",GRUPO_VIP:"Grupo VIP"})[state.settings.c7Tier] || "Dropshipping")+'</b></span></div>' +
-      '<div class="int-actions"><a class="sx-btn sx-btn--ghost sx-btn--sm" href="#" data-goto="mineracao">Ver catálogo</a><a class="sx-btn sx-btn--ghost sx-btn--sm" href="#" data-goto="config">Trocar faixa</a></div>';
-  } else {
-    c7 = '<p class="int-desc">'+(catalog.error ? 'Não consegui carregar o catálogo agora.' : 'Carregando o catálogo…')+'</p>';
+  renderSupplierAddress();
+}
+var SUPPLIER_ADDRESS = [
+  { k: "cep", label: "CEP", v: "01022-050" },
+  { k: "rua", label: "Rua / Número", v: "Parque Dom Pedro II, 268" },
+  { k: "comp", label: "Complemento", v: "Apto 22" },
+  { k: "bairro", label: "Bairro", v: "Centro" },
+  { k: "cidade", label: "Cidade", v: "São Paulo" },
+  { k: "uf", label: "UF", v: "SP" }
+];
+function supplierAddressText(){
+  var a = {}; SUPPLIER_ADDRESS.forEach(function(x){ a[x.k] = x.v; });
+  return a.rua + " - " + a.comp + ", " + a.bairro + ", " + a.cidade + " - " + a.uf + ", CEP " + a.cep;
+}
+function renderSupplierAddress(){
+  var grid = document.getElementById("addr-grid");
+  if (!grid || grid.childElementCount) return;
+  grid.innerHTML = SUPPLIER_ADDRESS.map(function(x, i){
+    return '<div class="addr-field"><div><span>'+escapeHtml(x.label)+'</span><b>'+escapeHtml(x.v)+'</b></div>' +
+      '<button type="button" class="addr-copy" data-copy="'+i+'"><svg><use href="#copy"/></svg><span>Copiar</span></button></div>';
+  }).join("");
+}
+function copyText(text){
+  if (navigator.clipboard && window.isSecureContext){
+    return navigator.clipboard.writeText(text).catch(function(){ return legacyCopy(text); });
   }
-  document.getElementById("int-suppliers").innerHTML =
-    '<div class="sx-card int-card">' +
-      '<div class="int-head"><span class="int-logo int-logo--txt">C7</span><div style="flex:1"><div class="int-name">C7 Drop</div></div>' +
-        (catalog.loaded ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Conectado</span>' : '<span class="sx-badge"><i class="sx-dot"></i>…</span>') + '</div>' +
-      '<p class="int-desc">Catálogo, custo e estoque sincronizados automaticamente.</p>' + c7 +
-    '</div>';
+  return legacyCopy(text);
+}
+function legacyCopy(text){
+  return new Promise(function(resolve, reject){
+    var ta = document.createElement("textarea");
+    ta.value = text; ta.setAttribute("readonly", ""); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove(); ok ? resolve() : reject(new Error("copy"));
+  });
+}
+function flashCopied(btn){
+  var span = btn.querySelector("span"), old = span.textContent;
+  btn.classList.add("is-done"); span.textContent = "Copiado";
+  setTimeout(function(){ btn.classList.remove("is-done"); span.textContent = old; }, 1600);
 }
 
 /* ================= configurações ================= */
@@ -2050,6 +2075,16 @@ function init(){
     if (!b || b.disabled) return;
     if (b.getAttribute("data-int") === "ml-connect") connectMl();
     if (b.getAttribute("data-int") === "ml-disconnect") disconnectMl();
+    if (b.getAttribute("data-int") === "other"){
+      toast("A conexão com a " + b.getAttribute("data-int-name") + " está sendo liberada. Por enquanto, publique pelo Mercado Livre.");
+    }
+  });
+  document.getElementById("int-address").addEventListener("click", function(e){
+    var one = e.target.closest("[data-copy]"), all = e.target.closest("[data-copy-all]");
+    var btn = one || all; if (!btn) return;
+    var text = one ? SUPPLIER_ADDRESS[+one.getAttribute("data-copy")].v : supplierAddressText();
+    copyText(text).then(function(){ flashCopied(btn); toast(all ? "Endereço completo copiado." : "Copiado: " + text); })
+      .catch(function(){ toast("Não consegui copiar. Selecione o texto e copie manualmente.", true); });
   });
   document.getElementById("auth-tabs").addEventListener("click", function(e){
     var b = e.target.closest("[data-auth-mode]"); if (b) setAuthMode(b.getAttribute("data-auth-mode"));
@@ -2091,7 +2126,7 @@ function startCatalog(){
   }).catch(function(){
     renderMining();
     renderProdutos();
-    toast("Não consegui carregar o catálogo do C7 Drop.", true);
+    toast("Não consegui carregar o catálogo do fornecedor.", true);
   });
 }
 
