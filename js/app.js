@@ -1783,20 +1783,23 @@ function submitAuth(ev){
   var btn = document.getElementById("auth-submit");
   btn.disabled = true;
   showAuthMsg("");
-  var here = /^https?:/.test(location.protocol) ? location.origin + location.pathname : undefined;
+  var signIn = function(){ return client.auth.signInWithPassword({ email: email, password: password }); };
+  // Cadastro: o servidor cria a conta já confirmada (sem e-mail de confirmação) e entramos em seguida
   var p = authMode === "signup"
-    ? client.auth.signUp({ email: email, password: password, options: { data: { name: name || email.split("@")[0] }, emailRedirectTo: here } })
-    : client.auth.signInWithPassword({ email: email, password: password });
+    ? client.functions.invoke("sx-signup", { method: "POST", body: { email: email, password: password, name: name } }).then(function(r){
+        var d = r.data;
+        if (d && d.ok){ btn.textContent = "Entrando…"; return signIn(); }
+        if (d && d.message) return { error: { message: d.message, friendly: true } };
+        return { error: r.error || { message: "Não consegui criar a conta agora. Tente de novo em instantes.", friendly: true } };
+      })
+    : signIn();
+  var label = btn.textContent;
+  if (authMode === "signup") btn.textContent = "Criando sua conta…";
   p.then(function(res){
-    btn.disabled = false;
-    if (res.error){ showAuthMsg(authErrorText(res.error)); return; }
-    if (authMode === "signup" && !res.data.session){
-      setAuthMode("login");
-      showAuthMsg("Conta criada. Enviamos um link de confirmação para " + email + ". Confirme e depois entre aqui.", true);
-      return;
-    }
+    btn.disabled = false; btn.textContent = label;
+    if (res.error){ showAuthMsg(res.error.friendly ? res.error.message : authErrorText(res.error)); return; }
     // a sessão chega pelo onAuthStateChange
-  }).catch(function(e){ btn.disabled = false; showAuthMsg(authErrorText(e)); });
+  }).catch(function(e){ btn.disabled = false; btn.textContent = label; showAuthMsg(authErrorText(e)); });
 }
 function initials(name){
   var parts = String(name||"").trim().split(/\s+/).filter(Boolean);
