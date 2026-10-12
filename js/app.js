@@ -940,8 +940,8 @@ function applyCatalogDetail(p, d){
   };
   if ((!p.images || p.images.length <= 1) && Array.isArray(d.images) && d.images.length) p.images = d.images.slice(0, 12);
   if (!p.gtin && d.gtin){ p.gtin = d.gtin; p.gtinAuto = true; }
-  if (!p.brand) p.brand = attrFromText(p.detail.text, ["marca"]);
-  if (!p.model) p.model = attrFromText(p.detail.text, ["modelo", "nome do modelo"]);
+  if (!p.brand) p.brand = attrFromText(p.detail.text, ["marca"]) || "Genérica";
+  if (!p.model) p.model = attrFromText(p.detail.text, ["modelo", "nome do modelo"]) || p.sku || "Padrão";
   if (!p.description) p.description = suggestDescription(p);
 }
 
@@ -1313,6 +1313,9 @@ function openListingEditor(id, opts){
   }
   if (!p.images) p.images = p.image ? [p.image] : [];
   if (!p.title) p.title = p.name;
+  // sem marca/modelo no fornecedor: usa padrões aceitos pelo Mercado Livre para não travar a publicação
+  if (p.detail && !p.brand) p.brand = "Genérica";
+  if (p.detail && !p.model) p.model = p.sku || "Padrão";
   if (!p.supplierName) p.supplierName = p.name;
   document.getElementById("ad-crumb-from").textContent = ad.from === "mineracao" ? "Mineração" : "Produtos";
   document.getElementById("ad-cancel").textContent = ad.isNew ? "Cancelar" : "Voltar";

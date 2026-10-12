@@ -116,6 +116,8 @@ const KNOWN: Record<string, string> = {
   "item.category_id.invalid": "A categoria sugerida não aceita anúncios diretos.",
   "item.listing_type_id.invalid": "O tipo de anúncio não é aceito para esta conta.",
   "seller.shipping_mode.not_supported": "A forma de envio da sua conta não é aceita nesta categoria.",
+  "shipping.me2_adoption_mandatory": "O Mercado Livre exige que sua conta use Mercado Envios. Ative em Mercado Livre > Vendas > Preferências de venda > Formas de entrega.",
+  "shipping.lost_me1_by_user": "A forma de envio da sua conta precisa estar configurada no Mercado Livre (Vendas > Preferências de venda > Formas de entrega).",
 };
 function mlCauses(body: any): string[] {
   const out: string[] = [];
@@ -129,6 +131,8 @@ function mlCauses(body: any): string[] {
     if (typeof c === "string") add(c);
     else if (c && c.type !== "warning") add(c.code, c.message);
   }
+  // só avisos: mostra os avisos, que costumam explicar a recusa
+  if (!out.length) for (const c of list) if (c && typeof c === "object") add(c.code, c.message);
   if (!out.length) add(body?.message, body?.error);
   return out.slice(0, 6);
 }
@@ -234,6 +238,17 @@ Deno.serve(async (req: Request) => {
     attributes,
   };
   if (b.sku) item.seller_custom_field = String(b.sku).slice(0, 60);
+
+  // Forma de envio que a conta tem ativa (Mercado Envios quando disponível)
+  if (me?.id) {
+    const sp = await fetch(`${ML}/users/${me.id}/shipping_preferences`, { headers: H, signal: AbortSignal.timeout(10_000) })
+      .then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    const modes: string[] = Array.isArray(sp?.modes) ? sp.modes : [];
+    if (modes.length) {
+      const mode = modes.includes("me2") ? "me2" : modes.includes("not_specified") ? "not_specified" : modes[0];
+      item.shipping = { mode, local_pick_up: false, free_shipping: false };
+    }
+  }
 
   const post = (body: unknown) => fetch(`${ML}/items`, {
     method: "POST", headers: H, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000),
