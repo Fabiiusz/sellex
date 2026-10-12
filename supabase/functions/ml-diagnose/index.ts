@@ -37,6 +37,29 @@ Deno.serve(async (req) => {
   if (!cfg || req.headers.get("x-sync-token") !== cfg.value) return json({ error: "unauthorized" }, 401);
   const body = await req.json().catch(() => ({}));
 
+  // modo "item": mostra a situação de um anúncio (e opcionalmente tenta ativar)
+  if (body.item_id) {
+    const { data: accs } = await admin.from("ml_accounts").select("user_id, nickname, ml_user_id");
+    const res: any[] = [];
+    for (const a of accs ?? []) {
+      const at = await accessToken(a.user_id);
+      if (!at.token) continue;
+      const H = { Authorization: `Bearer ${at.token}`, "Content-Type": "application/json", Accept: "application/json" };
+      const it = await fetch(`${ML}/items/${encodeURIComponent(body.item_id)}`, { headers: H }).then((r) => r.json()).catch(() => null);
+      if (!it || String(it.seller_id) !== String(a.ml_user_id)) continue;
+      const out: any = { nickname: a.nickname, id: it.id, status: it.status, sub_status: it.sub_status, tags: it.tags, health: it.health,
+        title: it.title, price: it.price, available_quantity: it.available_quantity, listing_type_id: it.listing_type_id,
+        shipping: it.shipping, permalink: it.permalink, warnings: it.warnings, pictures: (it.pictures ?? []).length,
+        date_created: it.date_created, last_updated: it.last_updated };
+      if (body.activate) {
+        const r = await fetch(`${ML}/items/${it.id}`, { method: "PUT", headers: H, body: JSON.stringify({ status: "active" }) });
+        out.activate = { status: r.status, body: await r.json().catch(() => null) };
+      }
+      res.push(out);
+    }
+    return json({ item: body.item_id, found: res });
+  }
+
   // produto de teste: com estoque, fotos e detalhes
   const { data: prods } = await admin.from("catalog_products")
     .select("id,name,gtin,price_dropshipping,price_list,stock,images,description_html,weight_kg,width_cm,height_cm,length_cm")

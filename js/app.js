@@ -1270,7 +1270,9 @@ function runPublish(p){
         '<div class="pub-success"><div class="pub-success__ico"><svg><use href="#check"/></svg></div>' +
         '<h3>Produto publicado!</h3>' +
         '<p class="pub-msg">Anúncio <b>'+escapeHtml(r.id)+'</b> criado no Mercado Livre por <b>'+fmtBRL(p.price)+'</b>.' +
-          (r.status && r.status !== "active" ? ' Situação no Mercado Livre: <b>'+escapeHtml(({under_review:"em revisão",paused:"pausado",not_yet_active:"aguardando ativação",inactive:"inativo",closed:"finalizado"})[r.status] || r.status)+'</b>.' : '') +
+          (r.status === "paused" || r.status === "not_yet_active" || r.status === "under_review"
+            ? ' O Mercado Livre está processando as fotos: o anúncio fica <b>ativo em alguns minutos</b>.'
+            : (r.status && r.status !== "active" ? ' Situação no Mercado Livre: <b>'+escapeHtml(({inactive:"inativo",closed:"finalizado"})[r.status] || r.status)+'</b>.' : '')) +
           (r.description_saved === false ? ' A descrição não foi aceita; você pode ajustá-la direto no Mercado Livre.' : '') + '</p>' +
         '<div class="pub-actions" style="justify-content:center">' +
           (p.mlPermalink ? '<a class="sx-btn sx-btn--ghost sx-btn--sm" href="'+escapeHtml(p.mlPermalink)+'" target="_blank" rel="noopener">Ver anúncio</a>' : '') +
