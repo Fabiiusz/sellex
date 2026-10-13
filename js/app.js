@@ -201,7 +201,12 @@ function renderMlOrdersBar(){
     '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" id="pedidos-refresh"'+(mlo.loading?' disabled':'')+'><svg><use href="#refresh"/></svg>Atualizar</button>';
 }
 function downloadMlLabel(btn, shipmentId){
-  if (String(shipmentId).indexOf("SIMSHIP") === 0){ toast("Venda simulada: no pedido real, a etiqueta em PDF do Mercado Livre baixa aqui."); return; }
+  if (String(shipmentId).indexOf("SIMSHIP") === 0){
+    var so = mlo.orders.find(function(x){ return x.shipping && x.shipping.id === shipmentId; });
+    saveBlob(sampleLabelPdf(so), "etiqueta-exemplo-" + shipmentId + ".pdf");
+    toast("Etiqueta de exemplo baixada (venda simulada).");
+    return;
+  }
   var client = sb(); if (!client) return;
   var old = btn.textContent; btn.disabled = true; btn.textContent = "Baixando…";
   client.functions.invoke("ml-orders", { method: "POST", body: { action: "label", shipment_id: shipmentId } }).then(function(r){
@@ -210,11 +215,51 @@ function downloadMlLabel(btn, shipmentId){
     if (!d || !d.ok){ toast((d && d.message) || "Não consegui baixar a etiqueta.", true); return; }
     var bin = atob(d.pdf_base64), arr = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-    var url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
-    var a = document.createElement("a"); a.href = url; a.download = d.filename || "etiqueta.pdf";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+    saveBlob(new Blob([arr], { type: "application/pdf" }), d.filename || "etiqueta.pdf");
+    toast("Etiqueta baixada.");
   }).catch(function(){ btn.disabled = false; btn.textContent = old; toast("Sem conexão com o servidor.", true); });
+}
+function saveBlob(blob, filename){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a"); a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+// PDF simples (sem bibliotecas) com os dados da venda simulada
+function sampleLabelPdf(o){
+  var asc = function(t){ return String(t == null ? "" : t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "").replace(/([()\\])/g, "\\$1"); };
+  var it = (o && o.items && o.items[0]) || {};
+  var sh = (o && o.shipping) || {};
+  var lines = [
+    [22, "ETIQUETA DE EXEMPLO - SIMULACAO"],
+    [11, "Esta etiqueta NAO vale para envio. Na venda real, o Mercado Livre gera a etiqueta oficial."],
+    [14, " "],
+    [14, "Venda: " + asc(o ? (o.packId || o.mlOrderId) : "-")],
+    [14, "Envio: " + asc(sh.id || "-") + "   (Mercado Envios)"],
+    [14, "Destinatario: " + asc(o ? o.client : "-")],
+    [14, "Destino: " + asc((sh.city || "-") + (sh.state ? "/" + String(sh.state).replace("BR-", "") : ""))],
+    [14, " "],
+    [14, "Produto: " + asc((it.title || (o && o.title) || "-").slice(0, 60))],
+    [14, "Quantidade: " + asc(o ? o.qty : 1) + "     SKU: " + asc((o && o.sku) || it.sku || "-")],
+    [14, " "],
+    [10, "Gerado pelo Sellex em " + asc(new Date().toLocaleString("pt-BR"))]
+  ];
+  var y = 780, body = "BT\n";
+  lines.forEach(function(l){ body += "/F1 " + l[0] + " Tf 1 0 0 1 40 " + y + " Tm (" + l[1] + ") Tj\n"; y -= l[0] + 12; });
+  body += "ET\n0.8 w 30 " + (y - 10) + " 535 " + (800 - y + 20) + " re S\n";
+  var objs = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+    "<< /Length " + body.length + " >>\nstream\n" + body + "endstream",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+  ];
+  var pdf = "%PDF-1.4\n", offs = [];
+  objs.forEach(function(ob, i){ offs.push(pdf.length); pdf += (i + 1) + " 0 obj\n" + ob + "\nendobj\n"; });
+  var xref = pdf.length;
+  pdf += "xref\n0 " + (objs.length + 1) + "\n0000000000 65535 f \n" + offs.map(function(n){ return ("0000000000" + n).slice(-10) + " 00000 n \n"; }).join("");
+  pdf += "trailer\n<< /Size " + (objs.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
+  return new Blob([pdf], { type: "application/pdf" });
 }
 function c7OrderText(o){
   var lines = ["Pedido Mercado Livre " + (o.packId || o.mlOrderId)];
@@ -1826,9 +1871,38 @@ function sb(){
   sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
+  // se o servidor disser que o login acabou, renova e tenta de novo uma vez;
+  // se não der, volta para a tela de login com uma mensagem clara
+  var rawInvoke = sbClient.functions.invoke.bind(sbClient.functions);
+  var isUnauth = function(r){
+    return !!(r && ((r.data && r.data.error === "unauthorized") || (r.error && r.error.context && r.error.context.status === 401)));
+  };
+  sbClient.functions.invoke = function(name, opts){
+    return rawInvoke(name, opts).then(function(r){
+      if (!isUnauth(r) || name === "sx-signup") return r;
+      return sbClient.auth.refreshSession().then(function(rs){
+        if (rs && rs.data && rs.data.session) return rawInvoke(name, opts);
+        throw new Error("session_lost");
+      }).then(function(r2){
+        if (isUnauth(r2)) throw new Error("session_lost");
+        return r2;
+      }).catch(function(){
+        sessionLost();
+        return { data: { ok: false, error: "unauthorized", message: "Seu login terminou. Entre de novo." }, error: null };
+      });
+    });
+  };
   return sbClient;
 }
 var account = { user: null, name: "", email: "" };
+function sessionLost(){
+  if (!account.user) return;
+  var c = sbClient;
+  (c ? c.auth.signOut({ scope: "local" }) : Promise.resolve()).catch(function(){}).then(function(){
+    onSignedOut();
+    showAuthMsg("Seu login terminou (você saiu em outra aba ou aparelho). Entre de novo.");
+  });
+}
 var authMode = "login";
 
 var AUTH_ERRORS = [
@@ -1924,7 +1998,7 @@ function onSignedIn(session){
   var u = session.user;
   if (isPendingUser(u)){
     showPendingAccess();
-    var c = sb(); if (c) c.auth.signOut().catch(function(){});
+    var c = sb(); if (c) c.auth.signOut({ scope: "local" }).catch(function(){});
     return;
   }
   if (account.user && account.user.id === u.id) return;
@@ -1955,7 +2029,7 @@ function onSignedOut(){
 function logout(){
   var client = sb();
   if (!client) return;
-  client.auth.signOut().then(function(){ onSignedOut(); });
+  client.auth.signOut({ scope: "local" }).catch(function(){}).then(function(){ onSignedOut(); });
 }
 function startAuth(){
   var client = sb();
