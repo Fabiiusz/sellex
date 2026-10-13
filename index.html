@@ -89,6 +89,7 @@
       <a class="sx-nav__item" href="#" data-page="painel" aria-current="page"><svg><use href="#home"/></svg><span>Painel</span></a>
       <a class="sx-nav__item" href="#" data-page="produtos"><svg><use href="#box"/></svg><span>Produtos</span></a>
       <a class="sx-nav__item" href="#" data-page="mineracao"><svg><use href="#gem"/></svg><span>Mineração</span></a>
+      <a class="sx-nav__item" href="#" data-page="vendas"><svg><use href="#store"/></svg><span>Vendas</span><b class="nav-count" id="nav-vendas-count" hidden></b></a>
       <a class="sx-nav__item" href="#" data-page="pedidos"><svg><use href="#truck"/></svg><span>Pedidos</span></a>
       <a class="sx-nav__item" href="#" data-page="integracoes"><svg><use href="#plug"/></svg><span>Integrações</span></a>
       <a class="sx-nav__item" href="#" data-page="config"><svg><use href="#settings"/></svg><span>Configurações</span></a>
@@ -331,6 +332,23 @@
 
         </div>
       </div>
+    </section>
+
+    <!-- ===================== VENDAS (operação) ===================== -->
+    <section id="page-vendas" class="page">
+      <div class="page-head">
+        <div><h1 class="sx-title">Vendas</h1><p class="sx-muted">Cada venda do Mercado Livre até chegar no cliente: etiqueta, pedido no fornecedor e envio.</p></div>
+        <div class="pedidos-sync" id="vendas-sync"></div>
+      </div>
+      <div class="grid g-4 vd-kpis" id="vd-kpis"></div>
+      <div class="sx-tabs vd-tabs" id="vd-tabs" role="tablist">
+        <button class="sx-tab" type="button" data-vd="toship" aria-selected="true">A enviar</button>
+        <button class="sx-tab" type="button" data-vd="shipped" aria-selected="false">Enviadas</button>
+        <button class="sx-tab" type="button" data-vd="delivered" aria-selected="false">Entregues</button>
+        <button class="sx-tab" type="button" data-vd="cancelled" aria-selected="false">Canceladas</button>
+        <button class="sx-tab" type="button" data-vd="all" aria-selected="false">Todas</button>
+      </div>
+      <div class="vd-list" id="vd-list"></div>
     </section>
 
     <!-- ===================== LOJAS ===================== -->

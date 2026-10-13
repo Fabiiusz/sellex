@@ -174,7 +174,7 @@ function loadMlOrders(force){
   var client = sb();
   if (!client || !ml.account || mlo.loading) return Promise.resolve();
   if (mlo.loaded && !force && mlo.fetchedAt && Date.now() - mlo.fetchedAt < 120000) return Promise.resolve();
-  mlo.loading = true; renderMlOrdersBar();
+  mlo.loading = true; renderMlOrdersBar(); if (currentPage() === "vendas") renderVendas();
   return client.functions.invoke("ml-orders", { method: "POST", body: { action: "list" } }).then(function(r){
     mlo.loading = false;
     var d = r.data;
@@ -185,7 +185,9 @@ function loadMlOrders(force){
       state.orders = loadOrders();
     } else mlo.error = (d && d.message) || "Não consegui buscar os pedidos do Mercado Livre agora.";
     renderMlOrdersBar();
+    renderVendasCount();
     var pg = currentPage();
+    if (pg === "vendas") renderVendas();
     if (pg === "painel") renderPainel();
     if (pg === "pedidos"){ renderVendasDashboard(); renderPedidos(); }
   }).catch(function(){ mlo.loading = false; mlo.error = "Sem conexão com o servidor."; renderMlOrdersBar(); });
@@ -1800,7 +1802,7 @@ function renderPedidos(){
           '</select></td>') +
       '<td class="ord-act">' + (o.mlOrderId
         ? (o.shipping && o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(o.shipping.id)+'"'+(o.shipping.status === "ready_to_ship" || o.shipping.status === "shipped" ? '' : ' title="A etiqueta é liberada quando o pedido está pronto para envio"')+'>Etiqueta</button>' : '') +
-          (o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--sm" data-c7="'+escapeHtml(o.id)+'">Pedido C7</button>' : '')
+          (o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--sm" data-c7="'+escapeHtml(o.id)+'">Pedido fornecedor</button>' : '')
         : '') + '</td>' +
     '</tr>';
   }).join("");
@@ -2205,6 +2207,113 @@ function initQrModal(){
   document.addEventListener("keydown", function(e){ if (e.key === "Escape" && modal.classList.contains("is-open")) closeQrModal(); });
 }
 
+/* ================= vendas (operação de cada venda do ML) ================= */
+var vd = { tab: "toship" };
+var C7_DONE_KEY = function(){ return "sx_c7_done_v1:" + (account.user ? account.user.id : "anon"); };
+function c7Done(){ return loadJSON(C7_DONE_KEY(), {}) || {}; }
+function setC7Done(orderId, on){
+  var m = c7Done(); if (on) m[orderId] = new Date().toISOString(); else delete m[orderId];
+  saveJSON(C7_DONE_KEY(), m);
+}
+function vdGroup(o){
+  if (o.status === "cancelado") return "cancelled";
+  if (o.shipping && o.shipping.status === "delivered") return "delivered";
+  if (o.shipping && (o.shipping.status === "shipped" || o.shipping.status === "not_delivered")) return "shipped";
+  return "toship";
+}
+function vdOrders(){ return mlo.orders.slice().sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : b.hour - a.hour; }); }
+function renderVendasCount(){
+  var el = document.getElementById("nav-vendas-count"); if (!el) return;
+  var n = mlo.orders.filter(function(o){ return vdGroup(o) === "toship" && o.mlStatus !== "payment_required"; }).length;
+  el.hidden = !n; el.textContent = n > 99 ? "99+" : String(n);
+}
+function renderVendas(){
+  var host = document.getElementById("vd-list"); if (!host) return;
+  var syncEl = document.getElementById("vendas-sync");
+  var bar = document.getElementById("pedidos-sync");
+  renderMlOrdersBar();
+  if (syncEl && bar) syncEl.innerHTML = bar.innerHTML.replace('id="pedidos-refresh"', 'id="vendas-refresh"');
+  var all = vdOrders(), done = c7Done();
+  var groups = { toship: 0, shipped: 0, delivered: 0, cancelled: 0 };
+  all.forEach(function(o){ groups[vdGroup(o)]++; });
+  var pendingC7 = all.filter(function(o){ return vdGroup(o) === "toship" && !done[o.id]; }).length;
+  var revenue = all.filter(function(o){ return o.status !== "cancelado"; }).reduce(function(a,o){ return a + o.total; }, 0);
+  var withCost = all.filter(function(o){ return o.status !== "cancelado" && o.unitCost != null; });
+  var profit = withCost.reduce(function(a,o){ return a + profitOfOrder(o); }, 0);
+  document.getElementById("vd-kpis").innerHTML = [
+    { l: "A enviar", v: fmtInt(groups.toship), warn: groups.toship > 0 },
+    { l: "Falta pedir no fornecedor", v: fmtInt(pendingC7), warn: pendingC7 > 0 },
+    { l: "Faturamento (90 dias)", v: fmtBRL(revenue) },
+    { l: "Lucro (vendas do Sellex)", v: withCost.length ? fmtBRL(profit) : "—" }
+  ].map(function(c){ return '<div class="sx-card"><div class="sx-stat__label">'+c.l+'</div><div class="sx-stat__value"'+(c.warn?' style="color:#FFD66B"':'')+'>'+c.v+'</div></div>'; }).join("");
+  document.querySelectorAll("#vd-tabs .sx-tab").forEach(function(b){
+    var k = b.getAttribute("data-vd"), n = k === "all" ? all.length : groups[k];
+    b.setAttribute("aria-selected", k === vd.tab ? "true" : "false");
+    b.innerHTML = b.textContent.replace(/\s*\(\d+\)$/, "") + (n ? ' <span class="vd-n">'+n+'</span>' : '');
+  });
+  if (!ml.account){ host.innerHTML = '<div class="sx-card empty">Conecte sua conta do Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</div>'; return; }
+  if (mlo.loading && !mlo.loaded){ host.innerHTML = '<div class="sx-card empty">Buscando suas vendas no Mercado Livre…</div>'; return; }
+  var list = all.filter(function(o){ return vd.tab === "all" || vdGroup(o) === vd.tab; });
+  if (!list.length){
+    host.innerHTML = '<div class="sx-card empty">' + (vd.tab === "toship" ? (all.length ? "Nenhuma venda esperando envio. 🎉" : "Nenhuma venda ainda. Assim que alguém comprar na sua loja do Mercado Livre, a venda aparece aqui.") : "Nenhuma venda nesta aba.") + '</div>';
+    return;
+  }
+  host.innerHTML = list.map(function(o){
+    var p = productById(o.productId), g = vdGroup(o), sh = o.shipping || {};
+    var labelReady = sh.status === "ready_to_ship" || sh.status === "shipped";
+    var isDone = !!done[o.id];
+    var paid = o.mlStatus === "paid" || g !== "toship";
+    var steps = [
+      { t: "Pago", ok: paid },
+      { t: "Etiqueta", ok: labelReady || g === "shipped" || g === "delivered" },
+      { t: "Pedido no fornecedor", ok: isDone || g === "shipped" || g === "delivered" },
+      { t: g === "delivered" ? "Entregue" : "Enviado", ok: g === "shipped" || g === "delivered" }
+    ];
+    var profit = profitOfOrder(o);
+    return '<div class="sx-card vd-card'+(g === "cancelled" ? ' is-cancel' : '')+'">' +
+      '<div class="vd-top">' +
+        '<span class="vd-thumb" style="background:'+prodTileBg(p ? p.category : "")+'">'+prodThumb(p)+'</span>' +
+        '<div class="vd-info"><b>'+escapeHtml(p ? p.name : (o.title || "Produto"))+'</b>' +
+          '<span>'+fmtInt(o.qty)+' un. · '+escapeHtml(o.client)+' · venda '+escapeHtml(o.packId || o.mlOrderId)+' · '+escapeHtml(o.date.split("-").reverse().join("/"))+'</span>' +
+          (sh.city ? '<span>Destino: '+escapeHtml(sh.city)+(sh.state ? '/'+escapeHtml(String(sh.state).replace("BR-","")) : '')+'</span>' : '') + '</div>' +
+        '<div class="vd-money"><b>'+fmtBRL(o.total)+'</b>'+(o.unitCost == null
+          ? '<span class="sx-muted" title="Este anúncio não foi criado pelo Sellex, então o custo do fornecedor não é conhecido">custo não vinculado</span>'
+          : '<span class="'+(profit >= 0 ? 'pos' : 'neg')+'">lucro '+fmtBRL(profit)+'</span>')+'</div>' +
+      '</div>' +
+      (g === "cancelled" ? '<p class="vd-cancel">Venda cancelada no Mercado Livre.</p>' :
+      '<ol class="vd-steps">' + steps.map(function(s){ return '<li class="'+(s.ok?'ok':'')+'"><i>'+(s.ok?'<svg><use href="#check"/></svg>':'')+'</i>'+s.t+'</li>'; }).join("") + '</ol>' +
+      (g === "toship" ? '<div class="vd-actions">' +
+        (sh.id ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(sh.id)+'"'+(labelReady?'':' disabled title="O Mercado Livre libera a etiqueta quando o pagamento é aprovado"')+'><svg><use href="#truck"/></svg>Baixar etiqueta</button>' : '') +
+        '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-c7="'+escapeHtml(o.id)+'"><svg><use href="#copy"/></svg>Copiar pedido</button>' +
+        '<label class="vd-done"><input type="checkbox" data-c7done="'+escapeHtml(o.id)+'"'+(isDone?' checked':'')+'>Pedido feito no fornecedor</label>' +
+      '</div>' : '')) +
+    '</div>';
+  }).join("");
+}
+function initVendas(){
+  document.getElementById("vd-tabs").addEventListener("click", function(e){
+    var b = e.target.closest("[data-vd]"); if (!b) return;
+    vd.tab = b.getAttribute("data-vd"); renderVendas();
+  });
+  var page = document.getElementById("page-vendas");
+  page.addEventListener("click", function(e){
+    if (e.target.closest("#vendas-refresh")){ loadMlOrders(true); return; }
+    var lb = e.target.closest("[data-label]");
+    if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
+    var c7 = e.target.closest("[data-c7]");
+    if (c7){
+      var o = mlo.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
+      if (o) copyText(c7OrderText(o)).then(function(){ toast("Pedido copiado. Cole no fornecedor e anexe a etiqueta."); }).catch(function(){ toast("Não consegui copiar.", true); });
+    }
+  });
+  page.addEventListener("change", function(e){
+    var cb = e.target.closest("[data-c7done]"); if (!cb) return;
+    setC7Done(cb.getAttribute("data-c7done"), cb.checked);
+    toast(cb.checked ? "Marcado: pedido feito no fornecedor." : "Desmarcado.");
+    renderVendas();
+  });
+}
+
 /* ================= clientes (área do administrador) ================= */
 var cli = { users: [], loaded: false, loading: false, tab: "pending", q: "", busy: {} };
 function isAdmin(){ return !!(account.user && account.user.app_metadata && account.user.app_metadata.role === "admin"); }
@@ -2344,6 +2453,7 @@ function goToPage(name, keepScroll){
   if (name==="integracoes") renderIntegracoes();
   if (name==="config") renderConfig();
   if (name==="clientes") loadClientes();
+  if (name==="vendas"){ renderVendas(); loadMlOrders(); }
   if (name==="anuncio") renderListingEditor();
   if (!keepScroll) window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -2470,7 +2580,7 @@ function init(){
     if (c7){
       var o = state.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
       if (!o) return;
-      copyText(c7OrderText(o)).then(function(){ toast("Pedido copiado. Cole no C7 e anexe a etiqueta."); })
+      copyText(c7OrderText(o)).then(function(){ toast("Pedido copiado. Cole no fornecedor e anexe a etiqueta."); })
         .catch(function(){ toast("Não consegui copiar.", true); });
     }
   });
@@ -2506,6 +2616,7 @@ function init(){
   initListingEditor();
   initQrModal();
   initClientes();
+  initVendas();
 
   renderPainel();
 }
