@@ -520,3 +520,4 @@ main{padding-bottom:0}
   .cli-act{grid-column:1/-1;min-width:0}
   .cli-act .sx-btn{width:100%}
 }
+.pedidos-sync{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:13px}.ord-act{white-space:nowrap;text-align:right}.ord-act .sx-btn{margin-left:6px}

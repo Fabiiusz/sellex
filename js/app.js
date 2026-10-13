@@ -140,8 +140,87 @@ var state = {
 // Exceção: o modo demonstração (5 cliques na logo) guarda pedidos simulados aqui.
 var DEMO_ORDERS_KEY = "sx_demo_orders_v1";
 function loadOrders(){
+  if (mlo.orders.length) return mlo.orders;
   var demo = loadJSON(DEMO_ORDERS_KEY, null);
   return Array.isArray(demo) ? demo : [];
+}
+
+/* ================= pedidos reais do Mercado Livre ================= */
+var mlo = { orders: [], raw: [], loaded: false, loading: false, error: null, fetchedAt: null };
+var ML_SHIP_LABEL = { pending: "Aguardando pagamento", handling: "Preparando", ready_to_ship: "Pronto para enviar", shipped: "A caminho", delivered: "Entregue", not_delivered: "Não entregue", cancelled: "Cancelado" };
+function mlStatusToSellex(o){
+  if (o.status === "cancelled" || (o.shipping && o.shipping.status === "cancelled")) return "cancelado";
+  if (o.shipping && o.shipping.status === "delivered") return "concluido";
+  if (o.shipping && o.shipping.status === "shipped") return "enviado";
+  return "processando";
+}
+function pad(n){ return n < 10 ? "0" + n : "" + n; }
+function mapMlOrder(o){
+  var it = o.items[0] || { title: "", qty: 1, unit_price: o.total, sale_fee: 0 };
+  var p = it.item_id ? state.products.find(function(x){ return x.mlItemId === it.item_id; }) : null;
+  var d = new Date(o.date);
+  var qty = o.items.reduce(function(a, x){ return a + x.qty; }, 0) || 1;
+  return {
+    id: "ml_" + o.id, mlOrderId: o.id, packId: o.pack_id,
+    date: d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()), hour: d.getHours(),
+    channel: "ml", productId: p ? p.id : "ml:" + (it.item_id || o.id), title: it.title,
+    qty: qty, total: o.total, status: mlStatusToSellex(o), client: o.buyer || "Comprador",
+    unitCost: p && p.cost != null ? p.cost : null,
+    fees: o.items.reduce(function(a, x){ return a + (x.sale_fee || 0) * x.qty; }, 0),
+    sku: (p && p.sku) || it.sku || null, mlItemId: it.item_id, items: o.items, shipping: o.shipping, mlStatus: o.status
+  };
+}
+function loadMlOrders(force){
+  var client = sb();
+  if (!client || !ml.account || mlo.loading) return Promise.resolve();
+  if (mlo.loaded && !force && mlo.fetchedAt && Date.now() - mlo.fetchedAt < 120000) return Promise.resolve();
+  mlo.loading = true; renderMlOrdersBar();
+  return client.functions.invoke("ml-orders", { method: "POST", body: { action: "list" } }).then(function(r){
+    mlo.loading = false;
+    var d = r.data;
+    if (d && d.ok){
+      mlo.raw = d.orders || [];
+      mlo.orders = mlo.raw.map(mapMlOrder);
+      mlo.loaded = true; mlo.error = null; mlo.fetchedAt = Date.now();
+      state.orders = loadOrders();
+    } else mlo.error = (d && d.message) || "Não consegui buscar os pedidos do Mercado Livre agora.";
+    renderMlOrdersBar();
+    var pg = currentPage();
+    if (pg === "painel") renderPainel();
+    if (pg === "pedidos"){ renderVendasDashboard(); renderPedidos(); }
+  }).catch(function(){ mlo.loading = false; mlo.error = "Sem conexão com o servidor."; renderMlOrdersBar(); });
+}
+function renderMlOrdersBar(){
+  var el = document.getElementById("pedidos-sync"); if (!el) return;
+  if (!ml.account){ el.innerHTML = '<span class="sx-muted">Conecte o Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</span>'; return; }
+  el.innerHTML = (mlo.loading ? '<span class="sx-muted">Buscando vendas no Mercado Livre…</span>'
+    : mlo.error ? '<span style="color:#FF8A83">'+escapeHtml(mlo.error)+'</span>'
+    : '<span class="sx-muted">'+(mlo.raw.length ? fmtInt(mlo.raw.length) + ' venda(s) do Mercado Livre' : 'Nenhuma venda no Mercado Livre nos últimos 90 dias')+(mlo.fetchedAt ? ' · atualizado às ' + new Date(mlo.fetchedAt).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : '')+'</span>') +
+    '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" id="pedidos-refresh"'+(mlo.loading?' disabled':'')+'><svg><use href="#refresh"/></svg>Atualizar</button>';
+}
+function downloadMlLabel(btn, shipmentId){
+  var client = sb(); if (!client) return;
+  var old = btn.textContent; btn.disabled = true; btn.textContent = "Baixando…";
+  client.functions.invoke("ml-orders", { method: "POST", body: { action: "label", shipment_id: shipmentId } }).then(function(r){
+    btn.disabled = false; btn.textContent = old;
+    var d = r.data;
+    if (!d || !d.ok){ toast((d && d.message) || "Não consegui baixar a etiqueta.", true); return; }
+    var bin = atob(d.pdf_base64), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([arr], { type: "application/pdf" }));
+    var a = document.createElement("a"); a.href = url; a.download = d.filename || "etiqueta.pdf";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+  }).catch(function(){ btn.disabled = false; btn.textContent = old; toast("Sem conexão com o servidor.", true); });
+}
+function c7OrderText(o){
+  var lines = ["Pedido Mercado Livre " + (o.packId || o.mlOrderId)];
+  (o.items || []).forEach(function(it){
+    var p = it.item_id ? state.products.find(function(x){ return x.mlItemId === it.item_id; }) : null;
+    lines.push((it.qty || 1) + "x " + ((p && p.sku) || it.sku || "SKU?") + " - " + ((p && (p.supplierName || p.name)) || it.title));
+  });
+  if (o.shipping) lines.push("Envio: Mercado Envios (etiqueta " + o.shipping.id + ")" + (o.shipping.city ? " - " + o.shipping.city + (o.shipping.state ? "/" + String(o.shipping.state).replace("BR-", "") : "") : ""));
+  return lines.join("\n");
 }
 
 function productById(id){ return state.products.find(function(p){ return p.id===id; }); }
@@ -174,7 +253,7 @@ function productMarginPct(p){
 }
 function profitOfOrder(o){
   if (o.status === "cancelado") return 0;
-  if (o.unitCost != null) return o.total - o.unitCost * o.qty;
+  if (o.unitCost != null) return o.total - o.unitCost * o.qty - (o.fees || 0);
   return o.total * (productMargin(o.productId) / 100);
 }
 
@@ -324,17 +403,18 @@ function renderTopProducts(){
   var v = validOrders(ordersInRange(0, days));
   var agg = {};
   v.forEach(function(o){
-    if (!agg[o.productId]) agg[o.productId] = {qty:0, revenue:0};
+    if (!agg[o.productId]) agg[o.productId] = {qty:0, revenue:0, title:o.title};
     agg[o.productId].qty += o.qty;
     agg[o.productId].revenue += o.total;
   });
-  var rows = Object.keys(agg).map(function(id){ return {id:id, qty:agg[id].qty, revenue:agg[id].revenue}; })
+  var rows = Object.keys(agg).map(function(id){ return {id:id, qty:agg[id].qty, revenue:agg[id].revenue, title:agg[id].title}; })
     .sort(function(a,b){ return b.revenue-a.revenue; }).slice(0,5);
 
   var tbody = rows.map(function(r){
     var p = productById(r.id);
-    if (!p) return "";
-    return '<tr><td class="prod"><span>'+prodThumb(p)+'</span>'+escapeHtml(p.name)+'</td><td>'+fmtInt(r.qty)+'</td><td>'+fmtBRL(r.revenue)+'</td></tr>';
+    var name = p ? p.name : r.title;
+    if (!name) return "";
+    return '<tr><td class="prod"><span>'+prodThumb(p)+'</span>'+escapeHtml(name)+'</td><td>'+fmtInt(r.qty)+'</td><td>'+fmtBRL(r.revenue)+'</td></tr>';
   }).join("");
   document.querySelector("#top-products-table tbody").innerHTML = tbody || '<tr><td colspan="3" class="empty">Sem vendas no período.</td></tr>';
 }
@@ -349,7 +429,7 @@ function renderRecentOrders(){
   var tbody = recent.map(function(o){
     var p = productById(o.productId);
     return '<tr>' +
-      '<td class="prod"><span>'+prodThumb(p)+'</span>'+(p?escapeHtml(p.name):"Produto removido")+'</td>' +
+      '<td class="prod"><span>'+prodThumb(p)+'</span>'+(p?escapeHtml(p.name):escapeHtml(o.title||"Produto removido"))+'</td>' +
       '<td>'+escapeHtml(o.client)+'</td>' +
       '<td><img class="mk" src="'+CH_ICON[o.channel]+'" alt="'+CHANNELS[o.channel].name+'"></td>' +
       '<td>'+fmtBRL(o.total)+'</td>' +
@@ -1693,7 +1773,7 @@ function renderPedidos(){
     if (channelF!=="todos" && o.channel!==channelF) return false;
     if (q){
       var p = productById(o.productId);
-      var hay = (o.client+" "+(p?p.name:"")).toLowerCase();
+      var hay = (o.client+" "+(p?p.name:(o.title||""))+" "+(o.mlOrderId||"")).toLowerCase();
       if (hay.indexOf(q)===-1) return false;
     }
     return true;
@@ -1709,17 +1789,23 @@ function renderPedidos(){
     var p = productById(o.productId);
     return '<tr>' +
       '<td class="sx-muted">'+o.date.split("-").reverse().join("/")+'</td>' +
-      '<td class="prod"><span>'+prodThumb(p)+'</span>'+(p?escapeHtml(p.name):"Produto removido")+'</td>' +
+      '<td class="prod"><span>'+prodThumb(p)+'</span>'+(p?escapeHtml(p.name):escapeHtml(o.title||"Produto removido"))+'</td>' +
       '<td>'+escapeHtml(o.client)+'</td>' +
       '<td><img class="mk" src="'+CH_ICON[o.channel]+'" alt="'+CHANNELS[o.channel].name+'"></td>' +
       '<td>'+fmtBRL(o.total)+'</td>' +
-      '<td><select class="sx-select" data-order-status="'+o.id+'" style="padding:7px 32px 7px 10px;font-size:12.5px">' +
-        Object.keys(STATUS_LABEL).map(function(s){ return '<option value="'+s+'"'+(s===o.status?" selected":"")+'>'+STATUS_LABEL[s]+'</option>'; }).join("") +
-      '</select></td>' +
+      (o.mlOrderId
+        ? '<td><span class="sx-badge sx-badge--'+STATUS_BADGE[o.status]+'"><i class="sx-dot"></i>'+escapeHtml((o.shipping && ML_SHIP_LABEL[o.shipping.status]) || STATUS_LABEL[o.status])+'</span></td>'
+        : '<td><select class="sx-select" data-order-status="'+o.id+'" style="padding:7px 32px 7px 10px;font-size:12.5px">' +
+            Object.keys(STATUS_LABEL).map(function(s){ return '<option value="'+s+'"'+(s===o.status?" selected":"")+'>'+STATUS_LABEL[s]+'</option>'; }).join("") +
+          '</select></td>') +
+      '<td class="ord-act">' + (o.mlOrderId
+        ? (o.shipping && o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(o.shipping.id)+'"'+(o.shipping.status === "ready_to_ship" || o.shipping.status === "shipped" ? '' : ' title="A etiqueta é liberada quando o pedido está pronto para envio"')+'>Etiqueta</button>' : '') +
+          (o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--sm" data-c7="'+escapeHtml(o.id)+'">Pedido C7</button>' : '')
+        : '') + '</td>' +
     '</tr>';
   }).join("");
 
-  document.querySelector("#pedidos-table tbody").innerHTML = rows || '<tr><td colspan="6" class="empty">'+(state.orders.length ? 'Nenhum pedido encontrado com esses filtros.' : 'Nenhum pedido ainda. Os pedidos do Mercado Livre vão aparecer aqui.')+'</td></tr>';
+  document.querySelector("#pedidos-table tbody").innerHTML = rows || '<tr><td colspan="7" class="empty">'+(state.orders.length ? 'Nenhum pedido encontrado com esses filtros.' : 'Nenhum pedido ainda. Os pedidos do Mercado Livre vão aparecer aqui.')+'</td></tr>';
   document.getElementById("pedidos-count").textContent = total + (total===1?" pedido":" pedidos") + (total>150 ? " (mostrando os 150 mais recentes)" : "");
 }
 function changeOrderStatus(orderId, newStatus){
@@ -1847,7 +1933,7 @@ function onSignedIn(session){
   loadUserState(u.id);
   renderAccount();
   renderPainel();
-  refreshMlStatus().then(function(){ handleMlReturn(); });
+  refreshMlStatus().then(function(){ handleMlReturn(); loadMlOrders(); });
   startCatalog();
 }
 function onSignedOut(){
@@ -1856,6 +1942,7 @@ function onSignedOut(){
   cli.users = []; cli.loaded = false;
   if (currentPage() === "clientes") goToPage("painel");
   ml.account = null; ml.loaded = false;
+  mlo.orders = []; mlo.raw = []; mlo.loaded = false; mlo.fetchedAt = null; mlo.error = null;
   state.products = []; state.orders = [];
   document.getElementById("auth-password").value = "";
   setAuthMode("login");
@@ -2253,7 +2340,7 @@ function goToPage(name, keepScroll){
   if (name==="painel") renderPainel();
   if (name==="produtos") renderProdutos();
   if (name==="mineracao") renderMining();
-  if (name==="pedidos"){ renderVendasDashboard(); renderPedidos(); }
+  if (name==="pedidos"){ renderVendasDashboard(); renderPedidos(); renderMlOrdersBar(); loadMlOrders(); }
   if (name==="integracoes") renderIntegracoes();
   if (name==="config") renderConfig();
   if (name==="clientes") loadClientes();
@@ -2375,6 +2462,20 @@ function init(){
     document.querySelectorAll("#vendas-period-tabs .sx-tab").forEach(function(b){ b.setAttribute("aria-selected", b===btn ? "true":"false"); });
     state.vendasPeriod = btn.getAttribute("data-period");
     renderVendasDashboard();
+  });
+  document.getElementById("pedidos-table").addEventListener("click", function(e){
+    var lb = e.target.closest("[data-label]");
+    if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
+    var c7 = e.target.closest("[data-c7]");
+    if (c7){
+      var o = state.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
+      if (!o) return;
+      copyText(c7OrderText(o)).then(function(){ toast("Pedido copiado. Cole no C7 e anexe a etiqueta."); })
+        .catch(function(){ toast("Não consegui copiar.", true); });
+    }
+  });
+  document.getElementById("page-pedidos").addEventListener("click", function(e){
+    if (e.target.closest("#pedidos-refresh")) loadMlOrders(true);
   });
   document.getElementById("pedidos-table").addEventListener("change", function(e){
     var sel = e.target.closest("[data-order-status]");
