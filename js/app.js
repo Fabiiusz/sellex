@@ -203,7 +203,8 @@ function renderMlOrdersBar(){
 function downloadMlLabel(btn, shipmentId){
   if (String(shipmentId).indexOf("SIMSHIP") === 0){
     var so = mlo.orders.find(function(x){ return x.shipping && x.shipping.id === shipmentId; });
-    saveBlob(sampleLabelPdf(so), "etiqueta-exemplo-" + shipmentId + ".pdf");
+    var blob = sampleLabelPdf(so);
+    saveBlob(blob, "etiqueta-exemplo-" + shipmentId + ".pdf");
     toast("Etiqueta de exemplo baixada (venda simulada).");
     return;
   }
@@ -260,6 +261,21 @@ function sampleLabelPdf(o){
   pdf += "xref\n0 " + (objs.length + 1) + "\n0000000000 65535 f \n" + offs.map(function(n){ return ("0000000000" + n).slice(-10) + " 00000 n \n"; }).join("");
   pdf += "trailer\n<< /Size " + (objs.length + 1) + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF";
   return new Blob([pdf], { type: "application/pdf" });
+}
+var SUPPLIER_SITE = "https://www.c7drop.com.br";
+function supplierUrlForOrder(o){
+  var it = (o && o.items && o.items[0]) || {};
+  var p = productById(o.productId) || (it.item_id ? state.products.find(function(x){ return x.mlItemId === it.item_id; }) : null);
+  var row = p && p.catalogId ? catalog.byId[p.catalogId] : null;
+  if (!row && p && p.sku) row = catalog.items.find(function(r){ return r.sku === p.sku; });
+  if (!row && it.sku) row = catalog.items.find(function(r){ return r.sku === it.sku; });
+  return row && row.slug ? SUPPLIER_SITE + "/produto/" + encodeURIComponent(row.slug) : SUPPLIER_SITE + "/produtos";
+}
+function orderAtSupplier(o){
+  var url = supplierUrlForOrder(o);
+  var win = window.open(url, "_blank", "noopener");   // abre já no clique, para o navegador não bloquear
+  copyText(c7OrderText(o)).catch(function(){});
+  toast(win === null ? "Pedido copiado. Seu navegador bloqueou a nova aba: libere pop-ups para o Sellex." : "Abrimos o produto no fornecedor e copiamos o pedido. É só colar lá e anexar a etiqueta.");
 }
 function c7OrderText(o){
   var lines = ["Pedido Mercado Livre " + (o.packId || o.mlOrderId)];
@@ -1848,7 +1864,7 @@ function renderPedidos(){
           '</select></td>') +
       '<td class="ord-act">' + (o.mlOrderId
         ? (o.shipping && o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(o.shipping.id)+'"'+(o.shipping.status === "ready_to_ship" || o.shipping.status === "shipped" ? '' : ' title="A etiqueta é liberada quando o pedido está pronto para envio"')+'>Etiqueta</button>' : '') +
-          (o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--sm" data-c7="'+escapeHtml(o.id)+'">Pedido fornecedor</button>' : '')
+          (o.status !== "cancelado" ? '<button type="button" class="sx-btn sx-btn--sm" data-supplier="'+escapeHtml(o.id)+'">Pedir no fornecedor</button>' : '')
         : '') + '</td>' +
     '</tr>';
   }).join("");
@@ -2367,7 +2383,8 @@ function renderVendas(){
   document.querySelectorAll("#vd-tabs .sx-tab").forEach(function(b){
     var k = b.getAttribute("data-vd"), n = k === "all" ? all.length : groups[k];
     b.setAttribute("aria-selected", k === vd.tab ? "true" : "false");
-    b.innerHTML = b.textContent.replace(/\s*\(\d+\)$/, "") + (n ? ' <span class="vd-n">'+n+'</span>' : '');
+    if (!b.getAttribute("data-base")) b.setAttribute("data-base", b.textContent.trim());
+    b.innerHTML = escapeHtml(b.getAttribute("data-base")) + (n ? ' <span class="vd-n">'+n+'</span>' : '');
   });
   if (!ml.account && !all.length){ host.innerHTML = '<div class="sx-card empty">Conecte sua conta do Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</div>'; return; }
   if (mlo.loading && !mlo.loaded){ host.innerHTML = '<div class="sx-card empty">Buscando suas vendas no Mercado Livre…</div>'; return; }
@@ -2402,6 +2419,7 @@ function renderVendas(){
       '<ol class="vd-steps">' + steps.map(function(s){ return '<li class="'+(s.ok?'ok':'')+'"><i>'+(s.ok?'<svg><use href="#check"/></svg>':'')+'</i>'+s.t+'</li>'; }).join("") + '</ol>' +
       (g === "toship" ? '<div class="vd-actions">' +
         (sh.id ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(sh.id)+'"'+(labelReady?'':' disabled title="O Mercado Livre libera a etiqueta quando o pagamento é aprovado"')+'><svg><use href="#truck"/></svg>Baixar etiqueta</button>' : '') +
+        '<button type="button" class="sx-btn sx-btn--sm" data-supplier="'+escapeHtml(o.id)+'"><svg><use href="#arrow"/></svg>Pedir no fornecedor</button>' +
         '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-c7="'+escapeHtml(o.id)+'"><svg><use href="#copy"/></svg>Copiar pedido</button>' +
         '<label class="vd-done"><input type="checkbox" data-c7done="'+escapeHtml(o.id)+'"'+(isDone?' checked':'')+'>Pedido feito no fornecedor</label>' +
       '</div>' : '')) +
@@ -2427,6 +2445,12 @@ function initVendas(){
     if (sd){ simRemove(sd.getAttribute("data-simdel")); return; }
     var lb = e.target.closest("[data-label]");
     if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
+    var sup = e.target.closest("[data-supplier]");
+    if (sup){
+      var so = mlo.orders.find(function(x){ return x.id === sup.getAttribute("data-supplier"); });
+      if (so) orderAtSupplier(so);
+      return;
+    }
     var c7 = e.target.closest("[data-c7]");
     if (c7){
       var o = mlo.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
@@ -2705,6 +2729,8 @@ function init(){
   document.getElementById("pedidos-table").addEventListener("click", function(e){
     var lb = e.target.closest("[data-label]");
     if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
+    var sup = e.target.closest("[data-supplier]");
+    if (sup){ var so = state.orders.find(function(x){ return x.id === sup.getAttribute("data-supplier"); }); if (so) orderAtSupplier(so); return; }
     var c7 = e.target.closest("[data-c7]");
     if (c7){
       var o = state.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
