@@ -180,7 +180,7 @@ function loadMlOrders(force){
     var d = r.data;
     if (d && d.ok){
       mlo.raw = d.orders || [];
-      mlo.orders = mlo.raw.map(mapMlOrder);
+      mlo.orders = simOrdersMapped().concat(mlo.raw.map(mapMlOrder));
       mlo.loaded = true; mlo.error = null; mlo.fetchedAt = Date.now();
       state.orders = loadOrders();
     } else mlo.error = (d && d.message) || "Não consegui buscar os pedidos do Mercado Livre agora.";
@@ -201,6 +201,7 @@ function renderMlOrdersBar(){
     '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" id="pedidos-refresh"'+(mlo.loading?' disabled':'')+'><svg><use href="#refresh"/></svg>Atualizar</button>';
 }
 function downloadMlLabel(btn, shipmentId){
+  if (String(shipmentId).indexOf("SIMSHIP") === 0){ toast("Venda simulada: no pedido real, a etiqueta em PDF do Mercado Livre baixa aqui."); return; }
   var client = sb(); if (!client) return;
   var old = btn.textContent; btn.disabled = true; btn.textContent = "Baixando…";
   client.functions.invoke("ml-orders", { method: "POST", body: { action: "label", shipment_id: shipmentId } }).then(function(r){
@@ -1935,6 +1936,7 @@ function onSignedIn(session){
   loadUserState(u.id);
   renderAccount();
   renderPainel();
+  mlo.orders = simOrdersMapped(); state.orders = loadOrders(); renderVendasCount();
   refreshMlStatus().then(function(){ handleMlReturn(); loadMlOrders(); });
   startCatalog();
 }
@@ -2222,6 +2224,47 @@ function vdGroup(o){
   return "toship";
 }
 function vdOrders(){ return mlo.orders.slice().sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : b.hour - a.hour; }); }
+// ---- vendas simuladas (só administrador, para testar o fluxo sem comprar) ----
+var SIM_KEY = function(){ return "sx_sim_orders_v1:" + (account.user ? account.user.id : "anon"); };
+function simRaw(){ var a = loadJSON(SIM_KEY(), []); return Array.isArray(a) ? a : []; }
+function simOrdersMapped(){ return simRaw().map(function(r){ var o = mapMlOrder(r); o.sim = true; return o; }); }
+function refreshSim(){
+  mlo.orders = simOrdersMapped().concat(mlo.raw.map(mapMlOrder));
+  state.orders = loadOrders();
+  renderVendasCount(); renderVendas();
+}
+function simulateSale(){
+  var pool = state.products.filter(function(p){ return p.mlItemId; });
+  if (!pool.length) pool = state.products.slice();
+  var p = pool[Math.floor(Math.random() * pool.length)];
+  var cities = [["Recife","BR-PE"],["São Paulo","BR-SP"],["Salvador","BR-BA"],["Fortaleza","BR-CE"],["Belo Horizonte","BR-MG"],["Curitiba","BR-PR"]];
+  var buyers = ["MARIA.SOUZA","JOAO_PE","CARLA.M","PEDRO77","ANA.BEATRIZ","LUCAS.SILVA"];
+  var c = cities[Math.floor(Math.random() * cities.length)];
+  var qty = Math.random() < 0.8 ? 1 : 2;
+  var price = p ? Number(p.price) || 50 : 59.9;
+  var id = "SIM" + String(Date.now()).slice(-9);
+  var raw = {
+    id: id, pack_id: null, date: new Date().toISOString(), status: "paid", total: Math.round(price * qty * 100) / 100,
+    buyer: buyers[Math.floor(Math.random() * buyers.length)],
+    items: [{ item_id: p ? (p.mlItemId || "SIMITEM_" + p.id) : "SIMITEM", title: p ? (p.title || p.name) : "Produto de teste", sku: p ? p.sku : null,
+      qty: qty, unit_price: price, sale_fee: Math.round(price * 0.12 * 100) / 100 }],
+    shipping: { id: "SIMSHIP" + id.slice(3), status: "ready_to_ship", city: c[0], state: c[1] }
+  };
+  if (p && !p.mlItemId){ raw.items[0].item_id = null; }
+  var list = simRaw(); list.unshift(raw); saveJSON(SIM_KEY(), list.slice(0, 30));
+  refreshSim();
+  if (p && !p.mlItemId){ var o = mlo.orders[0]; if (o){ o.productId = p.id; o.unitCost = p.cost != null ? p.cost : null; o.sku = p.sku || null; } renderVendas(); }
+  toast("Venda simulada criada" + (p ? ": " + (p.title || p.name) : "") + ".");
+}
+function simSetShip(id, status){
+  var list = simRaw();
+  list.forEach(function(r){ if ("ml_" + r.id === id){ if (status === "cancelled"){ r.status = "cancelled"; r.shipping.status = "cancelled"; } else { r.status = "paid"; r.shipping.status = status; } } });
+  saveJSON(SIM_KEY(), list); refreshSim();
+}
+function simRemove(id){
+  saveJSON(SIM_KEY(), simRaw().filter(function(r){ return "ml_" + r.id !== id; }));
+  setC7Done(id, false); refreshSim(); toast("Venda simulada removida.");
+}
 function renderVendasCount(){
   var el = document.getElementById("nav-vendas-count"); if (!el) return;
   var n = mlo.orders.filter(function(o){ return vdGroup(o) === "toship" && o.mlStatus !== "payment_required"; }).length;
@@ -2232,7 +2275,8 @@ function renderVendas(){
   var syncEl = document.getElementById("vendas-sync");
   var bar = document.getElementById("pedidos-sync");
   renderMlOrdersBar();
-  if (syncEl && bar) syncEl.innerHTML = bar.innerHTML.replace('id="pedidos-refresh"', 'id="vendas-refresh"');
+  if (syncEl && bar) syncEl.innerHTML = bar.innerHTML.replace('id="pedidos-refresh"', 'id="vendas-refresh"') +
+    (isAdmin() ? '<button type="button" class="sx-btn sx-btn--sm" id="vendas-simulate"><svg><use href="#plus"/></svg>Simular venda</button>' : '');
   var all = vdOrders(), done = c7Done();
   var groups = { toship: 0, shipped: 0, delivered: 0, cancelled: 0 };
   all.forEach(function(o){ groups[vdGroup(o)]++; });
@@ -2251,7 +2295,7 @@ function renderVendas(){
     b.setAttribute("aria-selected", k === vd.tab ? "true" : "false");
     b.innerHTML = b.textContent.replace(/\s*\(\d+\)$/, "") + (n ? ' <span class="vd-n">'+n+'</span>' : '');
   });
-  if (!ml.account){ host.innerHTML = '<div class="sx-card empty">Conecte sua conta do Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</div>'; return; }
+  if (!ml.account && !all.length){ host.innerHTML = '<div class="sx-card empty">Conecte sua conta do Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</div>'; return; }
   if (mlo.loading && !mlo.loaded){ host.innerHTML = '<div class="sx-card empty">Buscando suas vendas no Mercado Livre…</div>'; return; }
   var list = all.filter(function(o){ return vd.tab === "all" || vdGroup(o) === vd.tab; });
   if (!list.length){
@@ -2273,7 +2317,7 @@ function renderVendas(){
     return '<div class="sx-card vd-card'+(g === "cancelled" ? ' is-cancel' : '')+'">' +
       '<div class="vd-top">' +
         '<span class="vd-thumb" style="background:'+prodTileBg(p ? p.category : "")+'">'+prodThumb(p)+'</span>' +
-        '<div class="vd-info"><b>'+escapeHtml(p ? p.name : (o.title || "Produto"))+'</b>' +
+        '<div class="vd-info"><b>'+(o.sim ? '<span class="vd-sim">SIMULADA</span>' : '')+escapeHtml(p ? p.name : (o.title || "Produto"))+'</b>' +
           '<span>'+fmtInt(o.qty)+' un. · '+escapeHtml(o.client)+' · venda '+escapeHtml(o.packId || o.mlOrderId)+' · '+escapeHtml(o.date.split("-").reverse().join("/"))+'</span>' +
           (sh.city ? '<span>Destino: '+escapeHtml(sh.city)+(sh.state ? '/'+escapeHtml(String(sh.state).replace("BR-","")) : '')+'</span>' : '') + '</div>' +
         '<div class="vd-money"><b>'+fmtBRL(o.total)+'</b>'+(o.unitCost == null
@@ -2287,6 +2331,12 @@ function renderVendas(){
         '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-c7="'+escapeHtml(o.id)+'"><svg><use href="#copy"/></svg>Copiar pedido</button>' +
         '<label class="vd-done"><input type="checkbox" data-c7done="'+escapeHtml(o.id)+'"'+(isDone?' checked':'')+'>Pedido feito no fornecedor</label>' +
       '</div>' : '')) +
+      (o.sim ? '<div class="vd-simbar"><span>Simulação:</span>' +
+        '<select class="sx-select" data-simship="'+escapeHtml(o.id)+'">' +
+          [["ready_to_ship","Pronto para enviar"],["shipped","A caminho"],["delivered","Entregue"],["cancelled","Cancelada"]].map(function(x){
+            var cur = o.status === "cancelado" ? "cancelled" : (sh.status || "ready_to_ship");
+            return '<option value="'+x[0]+'"'+(x[0]===cur?' selected':'')+'>'+x[1]+'</option>'; }).join("") +
+        '</select><button type="button" class="vd-simdel" data-simdel="'+escapeHtml(o.id)+'">Remover</button></div>' : '') +
     '</div>';
   }).join("");
 }
@@ -2298,6 +2348,9 @@ function initVendas(){
   var page = document.getElementById("page-vendas");
   page.addEventListener("click", function(e){
     if (e.target.closest("#vendas-refresh")){ loadMlOrders(true); return; }
+    if (e.target.closest("#vendas-simulate")){ simulateSale(); return; }
+    var sd = e.target.closest("[data-simdel]");
+    if (sd){ simRemove(sd.getAttribute("data-simdel")); return; }
     var lb = e.target.closest("[data-label]");
     if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
     var c7 = e.target.closest("[data-c7]");
@@ -2307,6 +2360,8 @@ function initVendas(){
     }
   });
   page.addEventListener("change", function(e){
+    var ss = e.target.closest("[data-simship]");
+    if (ss){ simSetShip(ss.getAttribute("data-simship"), ss.value); toast("Venda simulada: " + ss.options[ss.selectedIndex].textContent + "."); return; }
     var cb = e.target.closest("[data-c7done]"); if (!cb) return;
     setC7Done(cb.getAttribute("data-c7done"), cb.checked);
     toast(cb.checked ? "Marcado: pedido feito no fornecedor." : "Desmarcado.");

@@ -559,3 +559,7 @@ main{padding-bottom:0}
   .vd-actions .sx-btn{flex:1}.vd-done{margin-left:0;width:100%}
 }
 @media (max-width:760px){.vd-kpis{grid-template-columns:1fr 1fr!important;gap:10px}.vd-kpis .sx-card{padding:14px}.vd-kpis .sx-stat__value{font-size:22px}}
+.vd-sim{display:inline-block;margin-right:8px;padding:2px 7px;border-radius:6px;font-size:10.5px;font-weight:700;letter-spacing:.05em;color:#2A1D00;background:#F2B93B;vertical-align:1px}
+.vd-simbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px dashed rgba(242,185,59,.35);font-size:12.5px;color:#FFD66B}
+.vd-simbar .sx-select{width:auto;padding:7px 32px 7px 10px;font-size:12.5px}
+.vd-simdel{font:500 12.5px var(--sx-font);color:#FF8A83;background:none;border:0;cursor:pointer;margin-left:auto}
