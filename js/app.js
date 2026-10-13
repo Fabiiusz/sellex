@@ -197,12 +197,12 @@ function renderMlOrdersBar(){
   if (!ml.account){ el.innerHTML = '<span class="sx-muted">Conecte o Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</span>'; return; }
   el.innerHTML = (mlo.loading ? '<span class="sx-muted">Buscando vendas no Mercado Livre…</span>'
     : mlo.error ? '<span style="color:#FF8A83">'+escapeHtml(mlo.error)+'</span>'
-    : '<span class="sx-muted">'+(mlo.raw.length ? fmtInt(mlo.raw.length) + ' venda(s) do Mercado Livre' : 'Nenhuma venda no Mercado Livre nos últimos 90 dias')+(mlo.fetchedAt ? ' · atualizado às ' + new Date(mlo.fetchedAt).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : '')+'</span>') +
+    : '<span class="sx-muted">'+(mlo.raw.length ? fmtInt(mlo.raw.length) + ' venda(s) do Mercado Livre' : (!mlo.orders.length && vdSource().length ? fmtInt(vdSource().length) + ' venda(s)' : 'Nenhuma venda no Mercado Livre nos últimos 90 dias'))+(mlo.fetchedAt ? ' · atualizado às ' + new Date(mlo.fetchedAt).toLocaleTimeString("pt-BR", {hour:"2-digit", minute:"2-digit"}) : '')+'</span>') +
     '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" id="pedidos-refresh"'+(mlo.loading?' disabled':'')+'><svg><use href="#refresh"/></svg>Atualizar</button>';
 }
 function downloadMlLabel(btn, shipmentId){
-  if (String(shipmentId).indexOf("SIMSHIP") === 0){
-    var so = mlo.orders.find(function(x){ return x.shipping && x.shipping.id === shipmentId; });
+  if (/^(SIMSHIP|DEMOSHIP)/.test(String(shipmentId))){
+    var so = vdSource().find(function(x){ return x.shipping && x.shipping.id === shipmentId; });
     var blob = sampleLabelPdf(so);
     saveBlob(blob, "etiqueta-exemplo-" + shipmentId + ".pdf");
     toast("Etiqueta de exemplo baixada (venda simulada).");
@@ -2313,7 +2313,27 @@ function vdGroup(o){
   if (o.shipping && (o.shipping.status === "shipped" || o.shipping.status === "not_delivered")) return "shipped";
   return "toship";
 }
-function vdOrders(){ return mlo.orders.slice().sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : b.hour - a.hour; }); }
+// vendas geradas pelo modo demonstração (5 cliques na logo) também aparecem aqui
+var DEMO_CITIES = [["São Paulo","BR-SP"],["Rio de Janeiro","BR-RJ"],["Belo Horizonte","BR-MG"],["Recife","BR-PE"],["Salvador","BR-BA"],["Fortaleza","BR-CE"],["Curitiba","BR-PR"],["Porto Alegre","BR-RS"],["Goiânia","BR-GO"],["Brasília","BR-DF"],["Manaus","BR-AM"],["Campinas","BR-SP"]];
+function demoToVenda(o){
+  var h = Math.abs(hashSeed(String(o.id)));
+  var p = productById(o.productId);
+  var city = DEMO_CITIES[h % DEMO_CITIES.length];
+  var ship = o.status === "cancelado" ? "cancelled" : o.status === "concluido" ? "delivered" : o.status === "enviado" ? "shipped" : (h % 3 === 0 ? "handling" : "ready_to_ship");
+  var title = p ? (p.title || p.name) : (o.title || "Produto");
+  return Object.assign({}, o, {
+    demo: true, mlOrderId: String(o.id).replace(/^\D+/, "") || String(o.id), title: title,
+    sku: (p && p.sku) || null, mlStatus: o.status === "cancelado" ? "cancelled" : "paid",
+    items: [{ item_id: p ? p.mlItemId || null : null, title: title, sku: (p && p.sku) || null, qty: o.qty, unit_price: o.qty ? o.total / o.qty : o.total, sale_fee: 0 }],
+    shipping: { id: "DEMOSHIP" + (h % 100000000), status: ship, city: city[0], state: city[1] }
+  });
+}
+function vdSource(){
+  if (mlo.orders.length) return mlo.orders;
+  var demo = loadJSON(DEMO_ORDERS_KEY, null);
+  return Array.isArray(demo) ? demo.map(demoToVenda) : [];
+}
+function vdOrders(){ return vdSource().slice().sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : b.hour - a.hour; }); }
 // ---- vendas simuladas (só administrador, para testar o fluxo sem comprar) ----
 var SIM_KEY = function(){ return "sx_sim_orders_v1:" + (account.user ? account.user.id : "anon"); };
 function simRaw(){ var a = loadJSON(SIM_KEY(), []); return Array.isArray(a) ? a : []; }
@@ -2357,7 +2377,7 @@ function simRemove(id){
 }
 function renderVendasCount(){
   var el = document.getElementById("nav-vendas-count"); if (!el) return;
-  var n = mlo.orders.filter(function(o){ return vdGroup(o) === "toship" && o.mlStatus !== "payment_required"; }).length;
+  var n = vdSource().filter(function(o){ return vdGroup(o) === "toship" && o.mlStatus !== "payment_required"; }).length;
   el.hidden = !n; el.textContent = n > 99 ? "99+" : String(n);
 }
 function renderVendas(){
@@ -2388,7 +2408,8 @@ function renderVendas(){
   });
   if (!ml.account && !all.length){ host.innerHTML = '<div class="sx-card empty">Conecte sua conta do Mercado Livre em <a href="#" data-goto="integracoes" style="color:var(--sx-blue-light)">Integrações</a> para ver suas vendas aqui.</div>'; return; }
   if (mlo.loading && !mlo.loaded){ host.innerHTML = '<div class="sx-card empty">Buscando suas vendas no Mercado Livre…</div>'; return; }
-  var list = all.filter(function(o){ return vd.tab === "all" || vdGroup(o) === vd.tab; });
+  var full = all.filter(function(o){ return vd.tab === "all" || vdGroup(o) === vd.tab; });
+  var list = full.slice(0, vd.limit || 40);
   if (!list.length){
     host.innerHTML = '<div class="sx-card empty">' + (vd.tab === "toship" ? (all.length ? "Nenhuma venda esperando envio. 🎉" : "Nenhuma venda ainda. Assim que alguém comprar na sua loja do Mercado Livre, a venda aparece aqui.") : "Nenhuma venda nesta aba.") + '</div>';
     return;
@@ -2430,30 +2451,31 @@ function renderVendas(){
             return '<option value="'+x[0]+'"'+(x[0]===cur?' selected':'')+'>'+x[1]+'</option>'; }).join("") +
         '</select><button type="button" class="vd-simdel" data-simdel="'+escapeHtml(o.id)+'">Remover</button></div>' : '') +
     '</div>';
-  }).join("");
+  }).join("") + (full.length > list.length ? '<div style="text-align:center"><button type="button" class="sx-btn sx-btn--ghost" id="vd-more">Mostrar mais ('+fmtInt(full.length - list.length)+' restantes)</button></div>' : '');
 }
 function initVendas(){
   document.getElementById("vd-tabs").addEventListener("click", function(e){
     var b = e.target.closest("[data-vd]"); if (!b) return;
-    vd.tab = b.getAttribute("data-vd"); renderVendas();
+    vd.tab = b.getAttribute("data-vd"); vd.limit = 40; renderVendas();
   });
   var page = document.getElementById("page-vendas");
   page.addEventListener("click", function(e){
     if (e.target.closest("#vendas-refresh")){ loadMlOrders(true); return; }
     if (e.target.closest("#vendas-simulate")){ simulateSale(); return; }
+    if (e.target.closest("#vd-more")){ vd.limit = (vd.limit || 40) + 40; renderVendas(); return; }
     var sd = e.target.closest("[data-simdel]");
     if (sd){ simRemove(sd.getAttribute("data-simdel")); return; }
     var lb = e.target.closest("[data-label]");
     if (lb && !lb.disabled){ downloadMlLabel(lb, lb.getAttribute("data-label")); return; }
     var sup = e.target.closest("[data-supplier]");
     if (sup){
-      var so = mlo.orders.find(function(x){ return x.id === sup.getAttribute("data-supplier"); });
+      var so = vdSource().find(function(x){ return x.id === sup.getAttribute("data-supplier"); });
       if (so) orderAtSupplier(so);
       return;
     }
     var c7 = e.target.closest("[data-c7]");
     if (c7){
-      var o = mlo.orders.find(function(x){ return x.id === c7.getAttribute("data-c7"); });
+      var o = vdSource().find(function(x){ return x.id === c7.getAttribute("data-c7"); });
       if (o) copyText(c7OrderText(o)).then(function(){ toast("Pedido copiado. Cole no fornecedor e anexe a etiqueta."); }).catch(function(){ toast("Não consegui copiar.", true); });
     }
   });
@@ -2829,6 +2851,7 @@ window.SellexApp = {
     state.orders = orders || [];
     if (orders && orders.length) saveJSON(DEMO_ORDERS_KEY, orders);
     else { try{ window.localStorage.removeItem(DEMO_ORDERS_KEY); }catch(e){} }
+    renderVendasCount();
     renderPainel();
     var pg = currentPage();
     if (pg !== "painel") goToPage(pg, true);
