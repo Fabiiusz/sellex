@@ -2325,7 +2325,7 @@ function qrSvg(text){
 }
 function qrLink(key){
   var token = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  var base = location.protocol === "file:" ? "https://fabiiusz.github.io/sellex/" : location.origin + location.pathname;
+  var base = location.protocol === "file:" ? "https://usuarios.sellexbrasil.com.br/" : location.origin + location.pathname;
   return base + "?connect=" + encodeURIComponent(key) + "&code=" + token;
 }
 function openQrModal(key, name){
