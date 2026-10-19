@@ -271,11 +271,81 @@ function supplierUrlForOrder(o){
   if (!row && it.sku) row = catalog.items.find(function(r){ return r.sku === it.sku; });
   return row && row.slug ? SUPPLIER_SITE + "/produto/" + encodeURIComponent(row.slug) : SUPPLIER_SITE + "/produtos";
 }
+// ---- pedido no fornecedor: popup com o valor e um Pix FICTÍCIO (fase de testes) ----
+// A chave abaixo é inválida de propósito: nenhum banco aceita pagar este código.
+var PIX_DEMO = { key: "SELLEX-PIX-DEMONSTRACAO", name: "SELLEX DEMO", city: "SAO PAULO" };
+function pixField(id, v){ v = String(v); return id + (v.length < 10 ? "0" : "") + v.length + v; }
+function pixCrc16(str){
+  var crc = 0xFFFF;
+  for (var i = 0; i < str.length; i++){
+    crc ^= str.charCodeAt(i) << 8;
+    for (var j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+  }
+  return ("0000" + crc.toString(16).toUpperCase()).slice(-4);
+}
+function pixDemoCode(amount, txid){
+  var ascii = function(t, n){ return String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]/g, "").toUpperCase().slice(0, n); };
+  var payload = pixField("00", "01") +
+    pixField("26", pixField("00", "br.gov.bcb.pix") + pixField("01", PIX_DEMO.key)) +
+    pixField("52", "0000") + pixField("53", "986") +
+    (amount > 0 ? pixField("54", amount.toFixed(2)) : "") +
+    pixField("58", "BR") + pixField("59", ascii(PIX_DEMO.name, 25)) + pixField("60", ascii(PIX_DEMO.city, 15)) +
+    pixField("62", pixField("05", ascii(txid || "SELLEX", 25).replace(/ /g, "") || "SELLEX")) + "6304";
+  return payload + pixCrc16(payload);
+}
+function supplierCostForOrder(o){
+  var it = (o.items && o.items[0]) || {};
+  var p = productById(o.productId) || (it.item_id ? state.products.find(function(x){ return x.mlItemId === it.item_id; }) : null);
+  var unit = p && p.cost != null ? Number(p.cost) : (o.unitCost != null ? Number(o.unitCost) : null);
+  if (unit == null){
+    var row = (p && p.catalogId && catalog.byId[p.catalogId]) || (it.sku ? catalog.items.find(function(r){ return r.sku === it.sku; }) : null);
+    if (row) unit = tierCost(row).value;
+  }
+  return { product: p, unit: unit, qty: o.qty || 1, total: unit != null ? Math.round(unit * (o.qty || 1) * 100) / 100 : null };
+}
+var payState = { order: null };
 function orderAtSupplier(o){
-  var url = supplierUrlForOrder(o);
-  var win = window.open(url, "_blank", "noopener");   // abre já no clique, para o navegador não bloquear
-  copyText(c7OrderText(o)).catch(function(){});
-  toast(win === null ? "Pedido copiado. Seu navegador bloqueou a nova aba: libere pop-ups para o Sellex." : "Abrimos o produto no fornecedor e copiamos o pedido. É só colar lá e anexar a etiqueta.");
+  payState.order = o;
+  var c = supplierCostForOrder(o), p = c.product;
+  var title = p ? (p.title || p.name) : (o.title || "Produto");
+  var code = pixDemoCode(c.total || 0, "SX" + String(o.mlOrderId || o.id).replace(/\D/g, "").slice(-12));
+  var src = p && (p.images && p.images[0] || p.image);
+  var th = document.getElementById("pay-thumb");
+  th.style.setProperty("--ad-tile", prodTileBg(p ? p.category : ""));
+  th.classList.toggle("is-empty", !src);
+  th.innerHTML = iconSVG(p ? p.icon : "box") + (src ? '<img src="'+escapeHtml(src)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add(\'is-empty\');this.remove()">' : "");
+  document.getElementById("pay-title").textContent = title;
+  document.getElementById("pay-meta").textContent = fmtInt(c.qty) + " un." + (c.unit != null ? " × " + fmtBRL(c.unit) : "") + " · venda " + (o.packId || o.mlOrderId || o.id);
+  document.getElementById("pay-total").textContent = c.total != null ? fmtBRL(c.total) : "—";
+  var svg = qrSvg(code);
+  document.getElementById("pay-qr").innerHTML = svg || '<p class="sx-muted">Não consegui gerar o QR Code.</p>';
+  document.getElementById("pay-code").value = code;
+  document.getElementById("pay-done").textContent = c7Done()[o.id] ? "Pedido já marcado como feito" : "Já paguei · marcar pedido feito";
+  document.getElementById("pay-modal").classList.add("is-open");
+}
+function closePayModal(){ document.getElementById("pay-modal").classList.remove("is-open"); payState.order = null; }
+function initPayModal(){
+  var m = document.getElementById("pay-modal");
+  m.addEventListener("click", function(e){
+    if (e.target === m || e.target.closest("[data-pay=close]")){ closePayModal(); return; }
+    var o = payState.order; if (!o) return;
+    if (e.target.closest("[data-pay=copy]")){
+      var btn = e.target.closest("[data-pay=copy]");
+      copyText(document.getElementById("pay-code").value).then(function(){ flashCopied(btn); toast("Código Pix copiado."); }).catch(function(){ toast("Não consegui copiar.", true); });
+    }
+    if (e.target.closest("[data-pay=open]")){
+      var win = window.open(supplierUrlForOrder(o), "_blank", "noopener");
+      copyText(c7OrderText(o)).catch(function(){});
+      toast(win === null ? "Libere pop-ups para o Sellex abrir o fornecedor." : "Abrimos o produto no fornecedor e copiamos o pedido.");
+    }
+    if (e.target.closest("[data-pay=done]")){
+      setC7Done(o.id, true);
+      toast("Pedido marcado como feito no fornecedor.");
+      closePayModal();
+      if (currentPage() === "vendas") renderVendas();
+    }
+  });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape" && m.classList.contains("is-open")) closePayModal(); });
 }
 function c7OrderText(o){
   var lines = ["Pedido Mercado Livre " + (o.packId || o.mlOrderId)];
@@ -2794,6 +2864,7 @@ function init(){
   initQrModal();
   initClientes();
   initVendas();
+  initPayModal();
 
   renderPainel();
 }
