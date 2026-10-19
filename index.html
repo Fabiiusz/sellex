@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
 <title>Sellex — Painel do vendedor</title>
-<link rel="stylesheet" href="css/sellex-ui.css?v=202610182112">
-<link rel="stylesheet" href="css/app-extra.css?v=202610182112">
+<link rel="stylesheet" href="css/sellex-ui.css?v=202610182139">
+<link rel="stylesheet" href="css/app-extra.css?v=202610182139">
 <style>body{background:var(--sx-bg)}</style>
 </head>
 <body class="sx">
@@ -581,6 +581,7 @@
     </div>
     <div class="pay-total"><span>Valor a pagar ao fornecedor</span><b id="pay-total"></b></div>
     <div class="pay-qr" id="pay-qr"></div>
+    <p class="pay-status" id="pay-status"></p>
     <label class="pay-code-label" for="pay-code">Pix copia e cola</label>
     <div class="pay-code"><input id="pay-code" readonly><button type="button" class="addr-copy" data-pay="copy"><svg><use href="#copy"/></svg><span>Copiar</span></button></div>
     <p class="pay-demo">Pix fictício: este código não recebe pagamentos de verdade.</p>
@@ -632,8 +633,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/qrcode.min.js?v=202610182112"></script>
-<script src="js/app.js?v=202610182112"></script>
-<script src="js/sellex-demo.js?v=202610182112"></script>
+<script src="js/qrcode.min.js?v=202610182139"></script>
+<script src="js/app.js?v=202610182139"></script>
+<script src="js/sellex-demo.js?v=202610182139"></script>
 </body>
 </html>

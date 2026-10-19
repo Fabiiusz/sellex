@@ -317,13 +317,26 @@ function orderAtSupplier(o){
   document.getElementById("pay-title").textContent = title;
   document.getElementById("pay-meta").textContent = fmtInt(c.qty) + " un." + (c.unit != null ? " × " + fmtBRL(c.unit) : "") + " · venda " + (o.packId || o.mlOrderId || o.id);
   document.getElementById("pay-total").textContent = c.total != null ? fmtBRL(c.total) : "—";
-  var svg = qrSvg(code);
-  document.getElementById("pay-qr").innerHTML = svg || '<p class="sx-muted">Não consegui gerar o QR Code.</p>';
-  document.getElementById("pay-code").value = code;
+  // carrega uns 2 segundos antes de mostrar o Pix (igual ao conectar marketplace)
+  var qrBox = document.getElementById("pay-qr"), codeEl = document.getElementById("pay-code"), copyBtn = document.querySelector("#pay-modal [data-pay=copy]");
+  clearTimeout(payState.timer);
+  qrBox.classList.add("is-loading");
+  qrBox.innerHTML = '<div class="qr-skeleton pay-skel"><span class="qr-spin"></span></div>';
+  codeEl.value = ""; codeEl.placeholder = "Gerando código Pix…";
+  copyBtn.disabled = true;
+  document.getElementById("pay-status").textContent = "Gerando Pix…";
+  payState.timer = setTimeout(function(){
+    if (payState.order !== o) return;
+    var svg = qrSvg(code);
+    qrBox.classList.remove("is-loading");
+    qrBox.innerHTML = svg ? '<div class="pay-qr__in">' + svg + '</div>' : '<p class="sx-muted">Não consegui gerar o QR Code.</p>';
+    codeEl.value = code; copyBtn.disabled = false;
+    document.getElementById("pay-status").textContent = "Escaneie o QR Code ou copie o código abaixo";
+  }, 2000);
   document.getElementById("pay-done").textContent = c7Done()[o.id] ? "Pedido já marcado como feito" : "Já paguei · marcar pedido feito";
   document.getElementById("pay-modal").classList.add("is-open");
 }
-function closePayModal(){ document.getElementById("pay-modal").classList.remove("is-open"); payState.order = null; }
+function closePayModal(){ clearTimeout(payState.timer); document.getElementById("pay-modal").classList.remove("is-open"); payState.order = null; }
 function initPayModal(){
   var m = document.getElementById("pay-modal");
   m.addEventListener("click", function(e){
@@ -331,6 +344,7 @@ function initPayModal(){
     var o = payState.order; if (!o) return;
     if (e.target.closest("[data-pay=copy]")){
       var btn = e.target.closest("[data-pay=copy]");
+      if (btn.disabled || !document.getElementById("pay-code").value) return;
       copyText(document.getElementById("pay-code").value).then(function(){ flashCopied(btn); toast("Código Pix copiado."); }).catch(function(){ toast("Não consegui copiar.", true); });
     }
     if (e.target.closest("[data-pay=open]")){
