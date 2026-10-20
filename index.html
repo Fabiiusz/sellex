@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
 <title>Sellex — Painel do vendedor</title>
-<link rel="stylesheet" href="css/sellex-ui.css?v=202610190030">
-<link rel="stylesheet" href="css/app-extra.css?v=202610190030">
+<link rel="stylesheet" href="css/sellex-ui.css?v=202610192320">
+<link rel="stylesheet" href="css/app-extra.css?v=202610192320">
 <style>body{background:var(--sx-bg)}</style>
 </head>
 <body class="sx">
@@ -618,9 +618,11 @@
     <form id="auth-form" class="stack" novalidate>
       <div id="auth-name-row" hidden><label class="sx-label" for="auth-name">Seu nome</label><input class="sx-input" id="auth-name" autocomplete="name"></div>
       <div><label class="sx-label" for="auth-email">E-mail</label><input class="sx-input" id="auth-email" type="email" autocomplete="email" required></div>
-      <div><label class="sx-label" for="auth-password">Senha</label><input class="sx-input" id="auth-password" type="password" autocomplete="current-password" minlength="6" required></div>
+      <div id="auth-password-row"><label class="sx-label" for="auth-password" id="auth-password-label">Senha</label><input class="sx-input" id="auth-password" type="password" autocomplete="current-password" minlength="6" required></div>
+      <div id="auth-password2-row" hidden><label class="sx-label" for="auth-password2">Repita a nova senha</label><input class="sx-input" id="auth-password2" type="password" autocomplete="new-password" minlength="6"></div>
       <p class="auth-msg" id="auth-msg" role="status" hidden></p>
       <button class="sx-btn sx-btn--block" type="submit" id="auth-submit">Entrar</button>
+      <p class="auth-links"><button type="button" class="auth-link" id="auth-forgot">Esqueci minha senha</button><button type="button" class="auth-link" id="auth-back" hidden>Voltar para o login</button></p>
     </form>
   </div>
   <div class="sx-card auth-pending" id="auth-pending" hidden role="status">
@@ -634,8 +636,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/qrcode.min.js?v=202610190030"></script>
-<script src="js/app.js?v=202610190030"></script>
-<script src="js/sellex-demo.js?v=202610190030"></script>
+<script src="js/qrcode.min.js?v=202610192320"></script>
+<script src="js/app.js?v=202610192320"></script>
+<script src="js/sellex-demo.js?v=202610192320"></script>
 </body>
 </html>

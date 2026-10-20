@@ -2025,15 +2025,67 @@ function showAuthMsg(text, ok){
   el.classList.toggle("is-ok", !!ok);
   el.hidden = !text;
 }
+// link de recuperação de senha: o Supabase devolve com #...type=recovery no endereço
+var recovering = /type=recovery/.test(location.hash);
+var AUTH_TEXTS = {
+  login:   ["Entrar", "Acesse seu painel de vendas.", "Entrar"],
+  signup:  ["Criar conta", "Comece a vender com o catálogo do seu fornecedor.", "Criar conta"],
+  forgot:  ["Recuperar senha", "Digite o e-mail da sua conta. Vamos mandar um link para você criar uma senha nova.", "Enviar link"],
+  recover: ["Criar nova senha", "Escolha uma senha nova para a sua conta.", "Salvar nova senha"]
+};
 function setAuthMode(mode){
   authMode = mode;
+  var t = AUTH_TEXTS[mode] || AUTH_TEXTS.login;
   document.querySelectorAll("#auth-tabs .sx-tab").forEach(function(b){ b.setAttribute("aria-selected", b.getAttribute("data-auth-mode")===mode ? "true" : "false"); });
+  document.getElementById("auth-tabs").hidden = mode === "forgot" || mode === "recover";
   document.getElementById("auth-name-row").hidden = mode !== "signup";
-  document.getElementById("auth-title").textContent = mode === "signup" ? "Criar conta" : "Entrar";
-  document.getElementById("auth-sub").textContent = mode === "signup" ? "Comece a vender com o catálogo do seu fornecedor." : "Acesse seu painel de vendas.";
-  document.getElementById("auth-submit").textContent = mode === "signup" ? "Criar conta" : "Entrar";
-  document.getElementById("auth-password").setAttribute("autocomplete", mode === "signup" ? "new-password" : "current-password");
+  document.getElementById("auth-email").parentNode.hidden = mode === "recover";
+  document.getElementById("auth-password-row").hidden = mode === "forgot";
+  document.getElementById("auth-password2-row").hidden = mode !== "recover";
+  document.getElementById("auth-password-label").textContent = mode === "recover" ? "Nova senha" : "Senha";
+  document.getElementById("auth-forgot").hidden = mode !== "login";
+  document.getElementById("auth-back").hidden = mode !== "forgot";
+  document.getElementById("auth-title").textContent = t[0];
+  document.getElementById("auth-sub").textContent = t[1];
+  document.getElementById("auth-submit").textContent = t[2];
+  document.getElementById("auth-password").setAttribute("autocomplete", mode === "login" ? "current-password" : "new-password");
+  if (mode === "recover"){ document.getElementById("auth-password").value = ""; document.getElementById("auth-password2").value = ""; }
   showAuthMsg("");
+}
+function showRecoverForm(){
+  document.getElementById("auth-gate").hidden = false;
+  document.querySelector("#auth-gate .auth-card").hidden = false;
+  document.getElementById("auth-pending").hidden = true;
+  setAuthMode("recover");
+}
+function submitForgot(client){
+  var email = document.getElementById("auth-email").value.trim();
+  if (!email){ showAuthMsg("Digite o e-mail da sua conta."); return; }
+  var btn = document.getElementById("auth-submit"); btn.disabled = true;
+  client.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname }).then(function(res){
+    btn.disabled = false;
+    if (res.error){ showAuthMsg(authErrorText(res.error)); return; }
+    showAuthMsg("Se existir uma conta com esse e-mail, o link para criar uma senha nova chega em alguns minutos. Confira também a caixa de spam.", true);
+  }).catch(function(e){ btn.disabled = false; showAuthMsg(authErrorText(e)); });
+}
+function submitRecover(client){
+  var p1 = document.getElementById("auth-password").value, p2 = document.getElementById("auth-password2").value;
+  if (p1.length < 6){ showAuthMsg("A senha precisa ter pelo menos 6 caracteres."); return; }
+  if (p1 !== p2){ showAuthMsg("As duas senhas não estão iguais."); return; }
+  var btn = document.getElementById("auth-submit"); btn.disabled = true;
+  client.auth.updateUser({ password: p1 }).then(function(res){
+    btn.disabled = false;
+    if (res.error){ showAuthMsg(/session|jwt|expired|missing/i.test(res.error.message||"") ? "Esse link expirou. Peça um novo em “Esqueci minha senha”." : authErrorText(res.error)); return; }
+    recovering = false;
+    try { history.replaceState(null, "", location.pathname); } catch(e){}
+    return client.auth.getSession().then(function(r){
+      var session = r && r.data && r.data.session;
+      setAuthMode("login");
+      if (session) onSignedIn(session);
+      else showAuthGate("Senha alterada! Entre com a senha nova.", true);
+      if (session && !isPendingUser(session.user)) toast("Senha alterada com sucesso.");
+    });
+  }).catch(function(e){ btn.disabled = false; showAuthMsg(authErrorText(e)); });
 }
 // conta criada, mas acesso ainda não liberado: mostra o aviso e não abre o sistema
 var pendingShown = false;
@@ -2053,6 +2105,8 @@ function submitAuth(ev){
   ev.preventDefault();
   var client = sb();
   if (!client){ showAuthMsg("Não consegui carregar o login. Verifique sua internet e recarregue a página."); return; }
+  if (authMode === "forgot") return submitForgot(client);
+  if (authMode === "recover") return submitRecover(client);
   var email = document.getElementById("auth-email").value.trim();
   var password = document.getElementById("auth-password").value;
   var name = document.getElementById("auth-name").value.trim();
@@ -2096,6 +2150,7 @@ function renderAccount(){
 }
 function onSignedIn(session){
   var u = session.user;
+  if (recovering){ showRecoverForm(); return; }
   if (isPendingUser(u)){
     showPendingAccess();
     var c = sb(); if (c) c.auth.signOut({ scope: "local" }).catch(function(){});
@@ -2135,12 +2190,17 @@ function startAuth(){
   var client = sb();
   if (!client){ showAuthGate("Não consegui carregar o login. Verifique sua internet e recarregue a página."); return; }
   client.auth.onAuthStateChange(function(event, session){
+    if (event === "PASSWORD_RECOVERY") recovering = true;
     if (session && session.user) onSignedIn(session);
     else if (event === "SIGNED_OUT") onSignedOut();
   });
+  var linkErr = /error_code=otp_expired|error=access_denied/.test(location.hash);
+  if (linkErr){ recovering = false; try { history.replaceState(null, "", location.pathname); } catch(e){} }
   client.auth.getSession().then(function(res){
     var session = res && res.data && res.data.session;
-    if (session) onSignedIn(session); else showAuthGate();
+    if (session) onSignedIn(session);
+    else if (linkErr){ setAuthMode("forgot"); showAuthGate("Esse link expirou ou já foi usado. Digite seu e-mail para receber um novo."); }
+    else showAuthGate();
   }).catch(function(){ showAuthGate("Sem conexão com o servidor. Verifique sua internet e recarregue a página."); });
 }
 
@@ -2871,6 +2931,8 @@ function init(){
     var b = e.target.closest("[data-auth-mode]"); if (b) setAuthMode(b.getAttribute("data-auth-mode"));
   });
   document.getElementById("auth-form").addEventListener("submit", submitAuth);
+  document.getElementById("auth-forgot").addEventListener("click", function(){ setAuthMode("forgot"); document.getElementById("auth-email").focus(); });
+  document.getElementById("auth-back").addEventListener("click", function(){ setAuthMode("login"); });
   document.getElementById("btn-logout").addEventListener("click", logout);
 
   document.getElementById("config-form").addEventListener("submit", saveConfig);
