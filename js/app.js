@@ -1198,7 +1198,21 @@ function proseLines(p){
 function titleCaseCaps(t){
   return t.replace(/\b([A-ZÀ-Ú]{4,})\b/g, function(w){ return /\d/.test(w) ? w : w.charAt(0) + w.slice(1).toLowerCase(); });
 }
+// O Mercado Livre não aceita palavras promocionais no título (e não acha categoria com elas)
+var ML_PROMO_WORDS = /\b(super\s+)?(promo[cç][aã]o|promo|oferta|imperd[ií]vel|liquida[cç][aã]o|queima\s+de\s+estoque|desconto|barato|melhor\s+pre[cç]o|frete\s+gr[aá]tis|envio\s+(imediato|r[aá]pido)|pronta\s+entrega|lan[cç]amento|novidade|mega|top)\b/gi;
+function mlTitle(t){
+  t = String(t || "").replace(ML_PROMO_WORDS, " ")
+    .replace(/[!?¡¿*#@$%^~<>{}\[\]=_"'´`]+/g, " ")
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\uFE0F]/gu, " ")
+    .replace(/\s+/g, " ").trim();
+  // palavras em CAIXA ALTA viram Capitalizadas (siglas curtas como HD, USB, LED ficam)
+  t = t.split(" ").map(function(w){
+    return w.length > 3 && w === w.toUpperCase() && /[A-ZÀ-Ú]{4}/.test(w) ? w.charAt(0) + w.slice(1).toLowerCase() : w;
+  }).join(" ");
+  return t.replace(/^[\s,\-–\/|]+|[\s,\-–\/|]+$/g, "");
+}
 function fitTitle(t){
+  t = mlTitle(t);
   var seen = {}, words = String(t).replace(/[|•;]+/g, " ").replace(/\s+/g, " ").trim().split(" ");
   words = words.filter(function(w){ var k = w.toLowerCase(); if (w.length > 2 && seen[k]) return false; seen[k] = 1; return true; });
   t = words.join(" ");
@@ -1353,6 +1367,29 @@ function pubClose(){
   if (pub.running) return;
   document.getElementById("pub-modal").classList.remove("is-open");
 }
+// Se o ML não achar categoria pelo título, tenta de novo com títulos mais simples
+// (nome original do produto e versões mais curtas) antes de mostrar o erro.
+function titleFallbacks(payload, p){
+  var base = payload.title, words = base.split(" "), out = [base];
+  [fitTitle(p.name || ""), words.slice(0, 5).join(" "), words.slice(0, 4).join(" "), words.slice(0, 3).join(" ")].forEach(function(t){
+    t = fitTitle(t);
+    if (t && t.length >= 8 && out.indexOf(t) === -1) out.push(t);
+  });
+  return out;
+}
+function publishWithTitleFallback(client, payload, p){
+  var titles = titleFallbacks(payload, p), i = 0;
+  var attempt = function(){
+    var body = Object.assign({}, payload, { title: titles[i] });
+    return client.functions.invoke("ml-publish", { method: "POST", body: body }).then(function(res){
+      var r = res && res.data;
+      if (r && !r.ok && r.error === "no_category" && i < titles.length - 1){ i++; return attempt(); }
+      if (r && r.ok && i > 0){ p.title = titles[i]; }
+      return res;
+    });
+  };
+  return attempt();
+}
 function pubFail(states, key, message, opts){
   opts = opts || {};
   states[key] = "fail";
@@ -1432,7 +1469,7 @@ function runPublish(p){
     return step("prepare", function(){
       payload = {
         catalogId: p.catalogId || null, sku: p.sku || null, stock: p.stock,
-        title: (p.title || p.name).trim().slice(0, 60),
+        title: fitTitle(p.title || p.name) || (p.title || p.name).trim().slice(0, 60),
         description: (p.description || "").trim(),
         price: p.price, brand: (p.brand || "").trim(), model: (p.model || "").trim(),
         gtin: (p.gtin || "").replace(/\D/g, ""), gtinReason: p.gtinReason || "",
@@ -1459,7 +1496,7 @@ function runPublish(p){
       ? wait(1400).then(function(){
           return { data: { ok: true, test: true, id: "MLB" + String(Date.now()).slice(-10), permalink: null, available_quantity: p.stock, description_saved: true } };
         })
-      : (client ? client.functions.invoke("ml-publish", { method: "POST", body: payload }) : null);
+      : (client ? publishWithTitleFallback(client, payload, p) : null);
     if (!request){ pubFail(states, "publish", "Sem conexão com o servidor do Sellex.", { retry: true }); stop(); }
     return request.then(function(res){
       var r = res.data;
