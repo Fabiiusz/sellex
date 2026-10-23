@@ -2011,23 +2011,32 @@ function sb(){
   // se o servidor disser que o login acabou, renova e tenta de novo uma vez;
   // se não der, volta para a tela de login com uma mensagem clara
   var rawInvoke = sbClient.functions.invoke.bind(sbClient.functions);
+  // "login inválido" pode vir como 401, 403 ou como corpo {error:"unauthorized"} em qualquer status
   var isUnauth = function(r){
-    return !!(r && ((r.data && r.data.error === "unauthorized") || (r.error && r.error.context && r.error.context.status === 401)));
+    if (!r) return Promise.resolve(false);
+    if (r.data && r.data.error === "unauthorized") return Promise.resolve(true);
+    var ctx = r.error && r.error.context;
+    if (!ctx) return Promise.resolve(false);
+    if (ctx.status === 401 || ctx.status === 403) return Promise.resolve(true);
+    if (typeof ctx.clone !== "function") return Promise.resolve(false);
+    return ctx.clone().json().then(function(b){ return !!(b && b.error === "unauthorized"); }).catch(function(){ return false; });
   };
   sbClient.functions.invoke = function(name, opts){
     return rawInvoke(name, opts).then(function(r){
-      if (!isUnauth(r) || name === "sx-signup") return r;
+      if (name === "sx-signup") return r;
+      return isUnauth(r).then(function(bad){ return bad ? retry(r) : r; });
+    });
+    function retry(r){
       return sbClient.auth.refreshSession().then(function(rs){
         if (rs && rs.data && rs.data.session) return rawInvoke(name, opts);
         throw new Error("session_lost");
       }).then(function(r2){
-        if (isUnauth(r2)) throw new Error("session_lost");
-        return r2;
+        return isUnauth(r2).then(function(bad){ if (bad) throw new Error("session_lost"); return r2; });
       }).catch(function(){
         sessionLost();
-        return { data: { ok: false, error: "unauthorized", message: "Seu login terminou. Entre de novo." }, error: null };
+        return { data: { ok: false, error: "session_lost", message: "Seu login terminou. Entre de novo." }, error: null };
       });
-    });
+    }
   };
   return sbClient;
 }
@@ -2037,8 +2046,23 @@ function sessionLost(){
   var c = sbClient;
   (c ? c.auth.signOut({ scope: "local" }) : Promise.resolve()).catch(function(){}).then(function(){
     onSignedOut();
-    showAuthMsg("Seu login terminou (você saiu em outra aba ou aparelho). Entre de novo.");
+    var skew = clockSkewMinutes();
+    showAuthMsg(skew != null && Math.abs(skew) > 10
+      ? "Seu login terminou. A data e a hora deste computador estão erradas (diferença de " + Math.round(Math.abs(skew)/60) + "h), o que derruba o login. Ajuste o relógio para automático e entre de novo."
+      : "Seu login terminou. Entre de novo.");
   });
+}
+// diferença (em minutos) entre o relógio deste computador e o do servidor, medida a cada chamada
+var serverClockSkew = null;
+function clockSkewMinutes(){ return serverClockSkew; }
+// o login acabou de ser emitido pelo servidor: compara a hora dele (iat) com o relógio local
+function measureClock(event, session){
+  if (!session || !session.access_token || (event !== "SIGNED_IN" && event !== "TOKEN_REFRESHED")) return;
+  try {
+    var part = session.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    var iat = JSON.parse(atob(part + "===".slice((part.length + 3) % 4))).iat;
+    if (iat) serverClockSkew = (Date.now() - iat * 1000) / 60000;
+  } catch(e){}
 }
 var authMode = "login";
 
@@ -2227,6 +2251,7 @@ function startAuth(){
   var client = sb();
   if (!client){ showAuthGate("Não consegui carregar o login. Verifique sua internet e recarregue a página."); return; }
   client.auth.onAuthStateChange(function(event, session){
+    measureClock(event, session);
     if (event === "PASSWORD_RECOVERY") recovering = true;
     if (session && session.user) onSignedIn(session);
     else if (event === "SIGNED_OUT") onSignedOut();
