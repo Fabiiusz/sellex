@@ -6,8 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
 <title>Sellex — Painel do vendedor</title>
-<link rel="stylesheet" href="css/sellex-ui.css?v=202610231730">
-<link rel="stylesheet" href="css/app-extra.css?v=202610231730">
+<link rel="stylesheet" href="css/sellex-ui.css?v=202610231830">
+<link rel="stylesheet" href="css/app-extra.css?v=202610231830">
 <style>body{background:var(--sx-bg)}</style>
 </head>
 <body class="sx">
@@ -28,6 +28,7 @@
   <symbol id="trash" viewBox="0 0 24 24"><path d="M5 7h14M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
   <symbol id="refresh" viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 13.9-5.4M20 12a8 8 0 0 1-13.9 5.4M17 4v4h-4M7 20v-4h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
   <symbol id="copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
   <symbol id="flame" viewBox="0 0 24 24"><path d="M12 22c4 0 7-2.7 7-6.6 0-3.2-2-5.3-3.4-7.1-.4 1.6-1.3 2.7-2.4 3.2.4-3.4-.9-6.6-4.2-8.5.3 3-1.2 5-2.7 6.8C4.9 11.5 5 13.6 5 15.4 5 19.3 8 22 12 22Z" fill="currentColor"/><path d="M12 22c-1.9 0-3.2-1.3-3.2-3.1 0-1.7 1.2-2.6 2-3.6.2 1 .8 1.6 1.5 1.8 0-1.5.7-2.6 1.8-3.4.1 1.6 1.1 2.4 1.1 4.6 0 2.1-1.3 3.7-3.2 3.7Z" fill="#FFE9A8"/></symbol>
   <symbol id="trophy" viewBox="0 0 24 24"><path d="M7 4h10v4a5 5 0 0 1-10 0zM7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3M12 13v4M8.5 20h7M10 17h4" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -578,18 +579,20 @@
     <button class="modal-close qr-close" type="button" data-pay="close" aria-label="Fechar"><svg><use href="#x"/></svg></button>
     <div class="pay-head">
       <div class="pub-thumb" id="pay-thumb"></div>
-      <div class="pay-head__txt"><span class="sx-muted">Pedido no fornecedor</span><b id="pay-title"></b><span class="sx-muted" id="pay-meta"></span></div>
+      <div class="pay-head__txt"><span class="sx-muted">Pedido no fornecedor (C7 Drop)</span><b id="pay-title"></b><span class="sx-muted" id="pay-meta"></span></div>
     </div>
-    <div class="pay-total"><span>Valor a pagar ao fornecedor</span><b id="pay-total"></b></div>
-    <div class="pay-qr" id="pay-qr"></div>
-    <p class="pay-status" id="pay-status"></p>
-    <label class="pay-code-label" for="pay-code">Pix copia e cola</label>
-    <div class="pay-code"><input id="pay-code" readonly><button type="button" class="addr-copy" data-pay="copy"><svg><use href="#copy"/></svg><span>Copiar</span></button></div>
-    <p class="pay-demo">Pix fictício: este código não recebe pagamentos de verdade.</p>
-    <div class="pay-actions">
-      <button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pay="open"><svg><use href="#arrow"/></svg>Abrir produto no fornecedor</button>
-      <button type="button" class="sx-btn sx-btn--sm" data-pay="done" id="pay-done">Já paguei · marcar pedido feito</button>
-    </div>
+    <div class="pay-total"><span>Você paga ao fornecedor<small id="pay-total-note"></small></span><b id="pay-total"></b></div>
+    <ol class="sup-steps" id="sup-steps">
+      <li data-step="label"><i></i><div><b>Baixe a etiqueta do Mercado Livre</b><p id="sup-label-txt">Ela vai anexada no pedido do fornecedor. É com ela que o pacote sai para o seu cliente.</p>
+        <div class="sup-btns"><button type="button" class="sx-btn sx-btn--sm" data-pay="label"><svg><use href="#truck"/></svg>Baixar etiqueta</button></div></div></li>
+      <li data-step="product"><i></i><div><b>Coloque o produto no carrinho do C7</b><p>Na página do produto, escolha <b>Compra: Dropshipping</b>, quantidade <b id="sup-qty">1</b> e clique em <b>Adicionar ao carrinho</b>.</p>
+        <div class="sup-btns"><button type="button" class="sx-btn sx-btn--sm" data-pay="open"><svg><use href="#arrow"/></svg>Abrir produto no C7</button><button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pay="sku"><svg><use href="#copy"/></svg><span id="sup-sku">Copiar SKU</span></button></div></div></li>
+      <li data-step="checkout"><i></i><div><b>Finalize a compra no C7</b><p>No checkout, em <b>Anexar Etiqueta</b>, envie o PDF do passo 1. No frete, escolha <b>Embalagem C7 Drop</b>. Pague com Pix, cartão ou saldo da carteira.</p>
+        <div class="sup-btns"><button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-pay="checkout"><svg><use href="#arrow"/></svg>Ir para o checkout do C7</button></div></div></li>
+      <li data-step="done"><i></i><div><b>Confirme aqui no Sellex</b><p>Assim a venda sai da sua lista de pendências.</p>
+        <div class="sup-confirm"><input class="sx-input" id="sup-num" placeholder="Nº do pedido no C7 (opcional)" inputmode="numeric" autocomplete="off"><button type="button" class="sx-btn sx-btn--sm" data-pay="done" id="pay-done">Marcar pedido feito</button></div></div></li>
+    </ol>
+    <p class="sup-auto"><svg><use href="#bolt"/></svg><span><b>Pedido automático:</b> o Sellex faz todos esses passos sozinho assim que a venda sai. Em breve, no plano Automático.</span></p>
   </div>
 </div>
 
@@ -636,8 +639,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-<script src="js/qrcode.min.js?v=202610231730"></script>
-<script src="js/app.js?v=202610231730"></script>
-<script src="js/sellex-demo.js?v=202610231730"></script>
+<script src="js/qrcode.min.js?v=202610231830"></script>
+<script src="js/app.js?v=202610231830"></script>
+<script src="js/sellex-demo.js?v=202610231830"></script>
 </body>
 </html>

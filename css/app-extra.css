@@ -590,3 +590,28 @@ main{padding-bottom:0}
 .auth-links{margin:2px 0 0;text-align:center}
 .auth-link{background:none;border:0;padding:4px 6px;font:inherit;font-size:13.5px;color:var(--sx-blue-light);cursor:pointer}
 .auth-link:hover{text-decoration:underline}
+
+/* pedido no fornecedor: passo a passo guiado (modo manual) */
+.pay{max-width:480px}
+.pay-total span{display:flex;flex-direction:column;gap:2px}
+.pay-total small{font-size:11.5px;color:#9FB0FF}
+.sup-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.sup-steps>li{display:flex;gap:12px;padding:12px 14px;border-radius:14px;border:1px solid rgba(206,213,255,.12);background:rgba(255,255,255,.02);transition:border-color .2s,background .2s}
+.sup-steps>li>i{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font:600 12.5px var(--sx-font);font-style:normal;color:var(--sx-muted);border:1px solid rgba(206,213,255,.25)}
+.sup-steps>li>i svg{width:14px;height:14px}
+.sup-steps>li>div{min-width:0;flex:1}
+.sup-steps b{font-weight:500;color:var(--sx-text)}
+.sup-steps>li>div>b{display:block;font-size:14px;margin-top:3px}
+.sup-steps p{margin:4px 0 0;font-size:12.5px;line-height:1.45;color:var(--sx-muted)}
+.sup-steps p b{color:#DCE3FF}
+.sup-btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.sup-steps>li.is-current{border-color:rgba(143,163,255,.55);background:rgba(61,90,241,.10)}
+.sup-steps>li.is-current>i{color:#fff;background:var(--sx-blue);border-color:var(--sx-blue)}
+.sup-steps>li.is-done>i{color:#06070D;background:var(--sx-green);border-color:var(--sx-green)}
+.sup-steps>li.is-done>div>b{color:#A8F0C6}
+.sup-confirm{display:flex;gap:8px;margin-top:10px}
+.sup-confirm .sx-input{flex:1;min-width:0;height:36px;font-size:13px}
+.sup-auto{display:flex;gap:10px;align-items:flex-start;margin:14px 0 0;padding:10px 12px;border-radius:12px;font-size:12px;line-height:1.45;color:#C9D2FF;background:rgba(245,179,1,.07);border:1px dashed rgba(245,179,1,.4)}
+.sup-auto svg{flex:0 0 16px;width:16px;height:16px;color:#F5B301;margin-top:1px}
+.sup-auto b{color:#FFD66B;font-weight:500}
+@media (max-width:520px){.sup-confirm{flex-direction:column}.sup-btns .sx-btn{flex:1 1 100%;justify-content:center;white-space:normal}}

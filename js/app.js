@@ -206,19 +206,20 @@ function downloadMlLabel(btn, shipmentId){
     var blob = sampleLabelPdf(so);
     saveBlob(blob, "etiqueta-exemplo-" + shipmentId + ".pdf");
     toast("Etiqueta de exemplo baixada (venda simulada).");
-    return;
+    return Promise.resolve(true);
   }
-  var client = sb(); if (!client) return;
-  var old = btn.textContent; btn.disabled = true; btn.textContent = "Baixando…";
-  client.functions.invoke("ml-orders", { method: "POST", body: { action: "label", shipment_id: shipmentId } }).then(function(r){
-    btn.disabled = false; btn.textContent = old;
+  var client = sb(); if (!client) return Promise.resolve(false);
+  var old = btn.innerHTML; btn.disabled = true; btn.textContent = "Baixando…";
+  return client.functions.invoke("ml-orders", { method: "POST", body: { action: "label", shipment_id: shipmentId } }).then(function(r){
+    btn.disabled = false; btn.innerHTML = old;
     var d = r.data;
-    if (!d || !d.ok){ toast((d && d.message) || "Não consegui baixar a etiqueta.", true); return; }
+    if (!d || !d.ok){ toast((d && d.message) || "Não consegui baixar a etiqueta.", true); return false; }
     var bin = atob(d.pdf_base64), arr = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
     saveBlob(new Blob([arr], { type: "application/pdf" }), d.filename || "etiqueta.pdf");
     toast("Etiqueta baixada.");
-  }).catch(function(){ btn.disabled = false; btn.textContent = old; toast("Sem conexão com o servidor.", true); });
+    return true;
+  }).catch(function(){ btn.disabled = false; btn.innerHTML = old; toast("Sem conexão com o servidor.", true); return false; });
 }
 function saveBlob(blob, filename){
   var url = URL.createObjectURL(blob);
@@ -271,44 +272,45 @@ function supplierUrlForOrder(o){
   if (!row && it.sku) row = catalog.items.find(function(r){ return r.sku === it.sku; });
   return row && row.slug ? SUPPLIER_SITE + "/produto/" + encodeURIComponent(row.slug) : SUPPLIER_SITE + "/produtos";
 }
-// ---- pedido no fornecedor: popup com o valor e um Pix FICTÍCIO (fase de testes) ----
-// A chave abaixo é inválida de propósito: nenhum banco aceita pagar este código.
-var PIX_DEMO = { key: "SELLEX-PIX-DEMONSTRACAO", name: "SELLEX DEMO", city: "SAO PAULO" };
-function pixField(id, v){ v = String(v); return id + (v.length < 10 ? "0" : "") + v.length + v; }
-function pixCrc16(str){
-  var crc = 0xFFFF;
-  for (var i = 0; i < str.length; i++){
-    crc ^= str.charCodeAt(i) << 8;
-    for (var j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
-  }
-  return ("0000" + crc.toString(16).toUpperCase()).slice(-4);
-}
-function pixDemoCode(amount, txid){
-  var ascii = function(t, n){ return String(t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]/g, "").toUpperCase().slice(0, n); };
-  var payload = pixField("00", "01") +
-    pixField("26", pixField("00", "br.gov.bcb.pix") + pixField("01", PIX_DEMO.key)) +
-    pixField("52", "0000") + pixField("53", "986") +
-    (amount > 0 ? pixField("54", amount.toFixed(2)) : "") +
-    pixField("58", "BR") + pixField("59", ascii(PIX_DEMO.name, 25)) + pixField("60", ascii(PIX_DEMO.city, 15)) +
-    pixField("62", pixField("05", ascii(txid || "SELLEX", 25).replace(/ /g, "") || "SELLEX")) + "6304";
-  return payload + pixCrc16(payload);
-}
+// ---- pedido no fornecedor (modo manual guiado) ----
+// O lojista faz o pedido no site do C7 com o mínimo de trabalho: o Sellex baixa a etiqueta,
+// abre o produto certo, copia o SKU, leva ao checkout e guarda o nº do pedido.
+var C7_PACKAGING_FEE = 1.5;
 function supplierCostForOrder(o){
   var it = (o.items && o.items[0]) || {};
   var p = productById(o.productId) || (it.item_id ? state.products.find(function(x){ return x.mlItemId === it.item_id; }) : null);
   var unit = p && p.cost != null ? Number(p.cost) : (o.unitCost != null ? Number(o.unitCost) : null);
-  if (unit == null){
-    var row = (p && p.catalogId && catalog.byId[p.catalogId]) || (it.sku ? catalog.items.find(function(r){ return r.sku === it.sku; }) : null);
-    if (row) unit = tierCost(row).value;
-  }
-  return { product: p, unit: unit, qty: o.qty || 1, total: unit != null ? Math.round(unit * (o.qty || 1) * 100) / 100 : null };
+  var row = (p && p.catalogId && catalog.byId[p.catalogId]) || (it.sku ? catalog.items.find(function(r){ return r.sku === it.sku; }) : null);
+  if (unit == null && row) unit = tierCost(row).value;
+  var sku = (p && p.sku) || (row && row.sku) || it.sku || o.sku || "";
+  return { product: p, unit: unit, sku: sku, qty: o.qty || 1, total: unit != null ? Math.round(unit * (o.qty || 1) * 100) / 100 : null };
 }
+var C7_STEPS_KEY = function(){ return "sx_c7_steps_v1:" + (account.user ? account.user.id : "anon"); };
+function c7Steps(id){ var m = loadJSON(C7_STEPS_KEY(), {}) || {}; return m[id] || {}; }
+function setC7Step(id, patch){
+  var m = loadJSON(C7_STEPS_KEY(), {}) || {};
+  m[id] = Object.assign({}, m[id] || {}, patch);
+  saveJSON(C7_STEPS_KEY(), m);
+}
+function c7OrderNumber(id){ return c7Steps(id).num || ""; }
 var payState = { order: null };
+function renderSupSteps(){
+  var o = payState.order; if (!o) return;
+  var st = c7Steps(o.id), done = !!c7Done()[o.id];
+  var flags = { label: st.label || done, product: st.product || done, checkout: st.checkout || done, done: done };
+  var firstOpen = ["label","product","checkout","done"].find(function(k){ return !flags[k]; });
+  document.querySelectorAll("#sup-steps > li").forEach(function(li){
+    var k = li.getAttribute("data-step");
+    li.classList.toggle("is-done", !!flags[k]);
+    li.classList.toggle("is-current", k === firstOpen);
+    li.querySelector("i").innerHTML = flags[k] ? '<svg><use href="#check"/></svg>' : String(["label","product","checkout","done"].indexOf(k) + 1);
+  });
+  document.getElementById("pay-done").textContent = done ? "Pedido feito ✓" : "Marcar pedido feito";
+}
 function orderAtSupplier(o){
   payState.order = o;
-  var c = supplierCostForOrder(o), p = c.product;
+  var c = supplierCostForOrder(o), p = c.product, sh = o.shipping || {};
   var title = p ? (p.title || p.name) : (o.title || "Produto");
-  var code = pixDemoCode(c.total || 0, "SX" + String(o.mlOrderId || o.id).replace(/\D/g, "").slice(-12));
   var src = p && (p.images && p.images[0] || p.image);
   var th = document.getElementById("pay-thumb");
   th.style.setProperty("--ad-tile", prodTileBg(p ? p.category : ""));
@@ -316,47 +318,58 @@ function orderAtSupplier(o){
   th.innerHTML = iconSVG(p ? p.icon : "box") + (src ? '<img src="'+escapeHtml(src)+'" alt="" referrerpolicy="no-referrer" onerror="this.parentNode.classList.add(\'is-empty\');this.remove()">' : "");
   document.getElementById("pay-title").textContent = title;
   document.getElementById("pay-meta").textContent = fmtInt(c.qty) + " un." + (c.unit != null ? " × " + fmtBRL(c.unit) : "") + " · venda " + (o.packId || o.mlOrderId || o.id);
-  document.getElementById("pay-total").textContent = c.total != null ? fmtBRL(c.total) : "—";
-  // carrega uns 2 segundos antes de mostrar o Pix (igual ao conectar marketplace)
-  var qrBox = document.getElementById("pay-qr"), codeEl = document.getElementById("pay-code"), copyBtn = document.querySelector("#pay-modal [data-pay=copy]");
-  clearTimeout(payState.timer);
-  qrBox.classList.add("is-loading");
-  qrBox.innerHTML = '<div class="qr-skeleton pay-skel"><span class="qr-spin"></span></div>';
-  codeEl.value = ""; codeEl.placeholder = "Gerando código Pix…";
-  copyBtn.disabled = true;
-  document.getElementById("pay-status").textContent = "Gerando Pix…";
-  payState.timer = setTimeout(function(){
-    if (payState.order !== o) return;
-    var svg = qrSvg(code);
-    qrBox.classList.remove("is-loading");
-    qrBox.innerHTML = svg ? '<div class="pay-qr__in">' + svg + '</div>' : '<p class="sx-muted">Não consegui gerar o QR Code.</p>';
-    codeEl.value = code; copyBtn.disabled = false;
-    document.getElementById("pay-status").textContent = "Escaneie o QR Code ou copie o código abaixo";
-  }, 2000);
-  document.getElementById("pay-done").textContent = c7Done()[o.id] ? "Pedido já marcado como feito" : "Já paguei · marcar pedido feito";
+  document.getElementById("pay-total").textContent = c.total != null ? fmtBRL(c.total + C7_PACKAGING_FEE) : "—";
+  document.getElementById("pay-total-note").textContent = c.total != null ? "produto " + fmtBRL(c.total) + " + embalagem " + fmtBRL(C7_PACKAGING_FEE) : "confira o valor no C7";
+  document.getElementById("sup-qty").textContent = fmtInt(c.qty);
+  document.getElementById("sup-sku").textContent = c.sku ? "Copiar SKU " + c.sku : "Copiar dados do pedido";
+  var labelReady = sh.status === "ready_to_ship" || sh.status === "shipped" || /^(SIMSHIP|DEMOSHIP)/.test(String(sh.id || ""));
+  var lb = document.querySelector("#pay-modal [data-pay=label]");
+  lb.disabled = !sh.id || !labelReady;
+  document.getElementById("sup-label-txt").textContent = !sh.id
+    ? "Esta venda não usa Mercado Envios. Combine o envio com o fornecedor."
+    : labelReady ? "Ela vai anexada no pedido do fornecedor. É com ela que o pacote sai para o seu cliente."
+    : "O Mercado Livre libera a etiqueta quando o pagamento da venda é aprovado. Volte aqui em alguns minutos.";
+  document.getElementById("sup-num").value = c7OrderNumber(o.id);
+  renderSupSteps();
   document.getElementById("pay-modal").classList.add("is-open");
 }
-function closePayModal(){ clearTimeout(payState.timer); document.getElementById("pay-modal").classList.remove("is-open"); payState.order = null; }
+function closePayModal(){ document.getElementById("pay-modal").classList.remove("is-open"); payState.order = null; }
 function initPayModal(){
   var m = document.getElementById("pay-modal");
   m.addEventListener("click", function(e){
     if (e.target === m || e.target.closest("[data-pay=close]")){ closePayModal(); return; }
     var o = payState.order; if (!o) return;
-    if (e.target.closest("[data-pay=copy]")){
-      var btn = e.target.closest("[data-pay=copy]");
-      if (btn.disabled || !document.getElementById("pay-code").value) return;
-      copyText(document.getElementById("pay-code").value).then(function(){ flashCopied(btn); toast("Código Pix copiado."); }).catch(function(){ toast("Não consegui copiar.", true); });
+    var b = e.target.closest("[data-pay]"); if (!b || b.disabled) return;
+    var act = b.getAttribute("data-pay");
+    if (act === "label"){
+      downloadMlLabel(b, o.shipping.id).then(function(ok){
+        if (ok && payState.order === o){ setC7Step(o.id, { label: true }); renderSupSteps(); }
+      });
     }
-    if (e.target.closest("[data-pay=open]")){
+    if (act === "open"){
       var win = window.open(supplierUrlForOrder(o), "_blank", "noopener");
-      copyText(c7OrderText(o)).catch(function(){});
-      toast(win === null ? "Libere pop-ups para o Sellex abrir o fornecedor." : "Abrimos o produto no fornecedor e copiamos o pedido.");
+      var c = supplierCostForOrder(o);
+      copyText(c.sku || c7OrderText(o)).catch(function(){});
+      setC7Step(o.id, { product: true }); renderSupSteps();
+      toast(win === null ? "Libere pop-ups para o Sellex abrir o C7." : "Abrimos o produto no C7. Escolha Dropshipping e quantidade " + fmtInt(c.qty) + ".");
     }
-    if (e.target.closest("[data-pay=done]")){
+    if (act === "sku"){
+      var cs = supplierCostForOrder(o);
+      copyText(cs.sku || c7OrderText(o)).then(function(){ flashCopied(b); toast(cs.sku ? "SKU copiado: cole na busca do C7." : "Dados do pedido copiados."); }).catch(function(){ toast("Não consegui copiar.", true); });
+    }
+    if (act === "checkout"){
+      var w2 = window.open(SUPPLIER_SITE + "/checkout", "_blank", "noopener");
+      setC7Step(o.id, { checkout: true }); renderSupSteps();
+      if (w2 === null) toast("Libere pop-ups para o Sellex abrir o C7.", true);
+    }
+    if (act === "done"){
+      var num = document.getElementById("sup-num").value.replace(/[^\w-]/g, "").slice(0, 30);
+      setC7Step(o.id, { label: true, product: true, checkout: true, num: num });
       setC7Done(o.id, true);
-      toast("Pedido marcado como feito no fornecedor.");
+      toast(num ? "Pedido C7 nº " + num + " registrado." : "Pedido marcado como feito no fornecedor.");
       closePayModal();
       if (currentPage() === "vendas") renderVendas();
+      if (currentPage() === "pedidos" && typeof renderPedidos === "function") renderPedidos();
     }
   });
   document.addEventListener("keydown", function(e){ if (e.key === "Escape" && m.classList.contains("is-open")) closePayModal(); });
@@ -2648,7 +2661,7 @@ function renderVendas(){
         (sh.id ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-label="'+escapeHtml(sh.id)+'"'+(labelReady?'':' disabled title="O Mercado Livre libera a etiqueta quando o pagamento é aprovado"')+'><svg><use href="#truck"/></svg>Baixar etiqueta</button>' : '') +
         '<button type="button" class="sx-btn sx-btn--sm" data-supplier="'+escapeHtml(o.id)+'"><svg><use href="#arrow"/></svg>Pedir no fornecedor</button>' +
         '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-c7="'+escapeHtml(o.id)+'"><svg><use href="#copy"/></svg>Copiar pedido</button>' +
-        '<label class="vd-done"><input type="checkbox" data-c7done="'+escapeHtml(o.id)+'"'+(isDone?' checked':'')+'>Pedido feito no fornecedor</label>' +
+        '<label class="vd-done"><input type="checkbox" data-c7done="'+escapeHtml(o.id)+'"'+(isDone?' checked':'')+'>Pedido feito no fornecedor'+(c7OrderNumber(o.id) ? ' · C7 nº '+escapeHtml(c7OrderNumber(o.id)) : '')+'</label>' +
       '</div>' : '')) +
       (o.sim ? '<div class="vd-simbar"><span>Simulação:</span>' +
         '<select class="sx-select" data-simship="'+escapeHtml(o.id)+'">' +
