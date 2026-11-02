@@ -74,7 +74,9 @@ function loadJSON(key, fallback){
   }catch(e){ return fallback; }
 }
 function saveJSON(key, value){
+  if (typeof viewAs !== "undefined" && viewAs) return; // modo visualização do administrador: nada é gravado
   try{ window.localStorage.setItem(key, JSON.stringify(value)); }catch(e){ /* ignora se indisponível */ }
+  if (typeof cloudWatch === "function") cloudWatch(key);
 }
 
 /* ================= dados iniciais ================= */
@@ -140,7 +142,7 @@ var state = {
 // Exceção: o modo demonstração (5 cliques na logo) guarda pedidos simulados aqui.
 var DEMO_ORDERS_KEY = "sx_demo_orders_v1";
 function loadOrders(){
-  if (mlo.orders.length) return mlo.orders;
+  if (mlo.orders.length || viewAs) return mlo.orders;
   var demo = loadJSON(DEMO_ORDERS_KEY, null);
   return Array.isArray(demo) ? demo : [];
 }
@@ -172,7 +174,7 @@ function mapMlOrder(o){
 }
 function loadMlOrders(force){
   var client = sb();
-  if (!client || !ml.account || mlo.loading) return Promise.resolve();
+  if (!client || !ml.account || mlo.loading || viewAs) return Promise.resolve();
   if (mlo.loaded && !force && mlo.fetchedAt && Date.now() - mlo.fetchedAt < 120000) return Promise.resolve();
   mlo.loading = true; renderMlOrdersBar(); if (currentPage() === "vendas") renderVendas();
   return client.functions.invoke("ml-orders", { method: "POST", body: { action: "list" } }).then(function(r){
@@ -183,6 +185,7 @@ function loadMlOrders(force){
       mlo.orders = simOrdersMapped().concat(mlo.raw.map(mapMlOrder));
       mlo.loaded = true; mlo.error = null; mlo.fetchedAt = Date.now();
       state.orders = loadOrders();
+      cloudSchedule();
     } else mlo.error = (d && d.message) || "Não consegui buscar os pedidos do Mercado Livre agora.";
     renderMlOrdersBar();
     renderVendasCount();
@@ -286,7 +289,8 @@ function supplierCostForOrder(o){
   return { product: p, unit: unit, sku: sku, qty: o.qty || 1, total: unit != null ? Math.round(unit * (o.qty || 1) * 100) / 100 : null };
 }
 var C7_STEPS_KEY = function(){ return "sx_c7_steps_v1:" + (account.user ? account.user.id : "anon"); };
-function c7Steps(id){ var m = loadJSON(C7_STEPS_KEY(), {}) || {}; return m[id] || {}; }
+function c7StepsAll(){ return viewAs ? ((viewAs.extra && viewAs.extra.c7steps) || {}) : (loadJSON(C7_STEPS_KEY(), {}) || {}); }
+function c7Steps(id){ return c7StepsAll()[id] || {}; }
 function setC7Step(id, patch){
   var m = loadJSON(C7_STEPS_KEY(), {}) || {};
   m[id] = Object.assign({}, m[id] || {}, patch);
@@ -2035,6 +2039,10 @@ function sb(){
     return ctx.clone().json().then(function(b){ return !!(b && b.error === "unauthorized"); }).catch(function(){ return false; });
   };
   sbClient.functions.invoke = function(name, opts){
+    if (viewAs && name !== "sx-admin"){
+      toast("Modo visualização: as ações ficam desativadas na conta do cliente.", true);
+      return Promise.resolve({ data: { ok: false, error: "view_only", message: "Modo visualização: as ações ficam desativadas na conta do cliente." }, error: null });
+    }
     return rawInvoke(name, opts).then(function(r){
       if (name === "sx-signup") return r;
       return isUnauth(r).then(function(bad){ return bad ? retry(r) : r; });
@@ -2237,6 +2245,7 @@ function onSignedIn(session){
   document.getElementById("auth-gate").hidden = true;
   document.getElementById("nav-clientes").hidden = !isAdmin();
   loadUserState(u.id);
+  cloudPull(u.id);
   renderAccount();
   renderPainel();
   mlo.orders = simOrdersMapped(); state.orders = loadOrders(); renderVendasCount();
@@ -2310,6 +2319,7 @@ function handleMlReturn(){
   else toast(ML_RETURN_MSGS[r.reason] || "Não foi possível conectar o Mercado Livre. Tente de novo.", true);
 }
 function refreshMlStatus(){
+  if (viewAs){ renderIntegracoes(); renderMlMini(); renderOnboarding(); return Promise.resolve(); }
   var client = sb();
   if (!client || !account.user){ ml.loaded = true; renderIntegracoes(); return Promise.resolve(); }
   return client.from("ml_accounts").select("nickname, site_id, status, connected_at").maybeSingle().then(function(res){
@@ -2521,7 +2531,7 @@ function initQrModal(){
 /* ================= vendas (operação de cada venda do ML) ================= */
 var vd = { tab: "toship" };
 var C7_DONE_KEY = function(){ return "sx_c7_done_v1:" + (account.user ? account.user.id : "anon"); };
-function c7Done(){ return loadJSON(C7_DONE_KEY(), {}) || {}; }
+function c7Done(){ return viewAs ? ((viewAs.extra && viewAs.extra.c7done) || {}) : (loadJSON(C7_DONE_KEY(), {}) || {}); }
 function setC7Done(orderId, on){
   var m = c7Done(); if (on) m[orderId] = new Date().toISOString(); else delete m[orderId];
   saveJSON(C7_DONE_KEY(), m);
@@ -2548,7 +2558,7 @@ function demoToVenda(o){
   });
 }
 function vdSource(){
-  if (mlo.orders.length) return mlo.orders;
+  if (mlo.orders.length || viewAs) return mlo.orders;
   var demo = loadJSON(DEMO_ORDERS_KEY, null);
   return Array.isArray(demo) ? demo.map(demoToVenda) : [];
 }
@@ -2709,7 +2719,7 @@ function initVendas(){
 }
 
 /* ================= clientes (área do administrador) ================= */
-var cli = { users: [], loaded: false, loading: false, tab: "pending", q: "", busy: {} };
+var cli = { users: [], loaded: false, loading: false, tab: "pending", q: "", busy: {}, sort: "recent" };
 function isAdmin(){ return !!(account.user && account.user.app_metadata && account.user.app_metadata.role === "admin"); }
 function loadClientes(){
   var client = sb(); if (!client || !isAdmin() || cli.loading) return;
@@ -2721,21 +2731,41 @@ function loadClientes(){
     renderClientes();
   }).catch(function(){ cli.loading = false; cli.error = "Sem conexão com o servidor."; renderClientes(); });
 }
+function cliStat(u, k){ return u.stats && u.stats[k] != null ? Number(u.stats[k]) : 0; }
 function cliFiltered(){
   var q = cli.q;
-  return cli.users.filter(function(u){
+  var list = cli.users.filter(function(u){
     if (cli.tab === "pending" && !u.pending) return false;
     if (cli.tab === "approved" && u.pending) return false;
     return !q || (u.name + " " + u.email).toLowerCase().indexOf(q) > -1;
   });
+  var by = cli.sort || "recent";
+  if (by === "sales") list.sort(function(a, b){ return cliStat(b, "revenue90") - cliStat(a, "revenue90") || cliStat(b, "sales90") - cliStat(a, "sales90"); });
+  if (by === "products") list.sort(function(a, b){ return cliStat(b, "products") - cliStat(a, "products"); });
+  if (by === "active") list.sort(function(a, b){ return String(b.active_at || b.last_sign_in_at || "").localeCompare(String(a.active_at || a.last_sign_in_at || "")); });
+  return list;
+}
+function cliAgo(iso){
+  if (!iso) return "";
+  var m = (Date.now() - new Date(iso).getTime()) / 60000;
+  if (m < 2) return "agora";
+  if (m < 60) return "há " + Math.round(m) + " min";
+  if (m < 1440) return "há " + Math.round(m / 60) + " h";
+  var d = Math.round(m / 1440);
+  return d === 1 ? "ontem" : "há " + d + " dias";
 }
 function renderClientes(){
   var host = document.getElementById("cli-list"); if (!host) return;
   var total = cli.users.length, pend = cli.users.filter(function(u){ return u.pending; }).length;
+  var sumRev = cli.users.reduce(function(a, u){ return a + cliStat(u, "revenue90"); }, 0);
+  var sumSales = cli.users.reduce(function(a, u){ return a + cliStat(u, "sales90"); }, 0);
+  var sumProd = cli.users.reduce(function(a, u){ return a + cliStat(u, "products"); }, 0);
   document.getElementById("cli-kpis").innerHTML = [
-    { l: "Cadastros", v: total }, { l: "Aguardando liberação", v: pend, warn: pend > 0 }, { l: "Com acesso", v: total - pend }
+    { l: "Cadastros", v: fmtInt(total) }, { l: "Aguardando liberação", v: fmtInt(pend), warn: pend > 0 },
+    { l: "Produtos adicionados", v: fmtInt(sumProd) },
+    { l: "Vendas dos clientes (90 dias)", v: fmtInt(sumSales), s: fmtBRL(sumRev) }
   ].map(function(c){
-    return '<div class="sx-card"><div class="sx-stat__label">'+c.l+'</div><div class="sx-stat__value"'+(c.warn?' style="color:#FFD66B"':'')+'>'+(cli.loaded?fmtInt(c.v):'—')+'</div></div>';
+    return '<div class="sx-card"><div class="sx-stat__label">'+c.l+'</div><div class="sx-stat__value"'+(c.warn?' style="color:#FFD66B"':'')+'>'+(cli.loaded?c.v:'—')+'</div>'+(c.s && cli.loaded ? '<div class="cld-sub">'+c.s+'</div>' : '')+'</div>';
   }).join("");
   if (cli.loading && !cli.loaded){ host.innerHTML = '<div class="empty">Carregando clientes…</div>'; return; }
   if (cli.error && !cli.loaded){ host.innerHTML = '<div class="empty">'+escapeHtml(cli.error)+' <a href="#" id="cli-retry" style="color:var(--sx-blue-light)">Tentar de novo</a></div>'; return; }
@@ -2752,13 +2782,18 @@ function renderClientes(){
     var act = u.admin ? '' : u.pending
       ? '<button class="sx-btn sx-btn--sm" type="button" data-cli-act="approve" data-id="'+u.id+'"'+(busy?' disabled':'')+'>'+(busy?'Liberando…':'Liberar acesso')+'</button>'
       : '<button class="sx-btn sx-btn--ghost sx-btn--sm" type="button" data-cli-act="block" data-id="'+u.id+'"'+(busy?' disabled':'')+'>'+(busy?'Bloqueando…':'Bloquear')+'</button>';
+    var st = u.stats;
+    var usage = st ? fmtInt(cliStat(u, "products")) + ' produto(s) · ' + fmtInt(cliStat(u, "published")) + ' publicado(s)' +
+        (st.sales90 != null ? ' · <b>' + fmtInt(cliStat(u, "sales90")) + ' venda(s)</b> · ' + fmtBRL(cliStat(u, "revenue90")) : '')
+      : 'Sem atividade registrada ainda';
+    var seen = u.active_at || u.last_sign_in_at;
     return '<div class="cli-row">' +
       '<span class="sx-avatar cli-av">'+escapeHtml(initials(u.name || u.email))+'</span>' +
       '<div class="cli-main"><b>'+escapeHtml(u.name || u.email.split("@")[0])+'</b><span>'+escapeHtml(u.email)+'</span></div>' +
-      '<div class="cli-meta"><span>Cadastro: '+escapeHtml(fmtDateBR(u.created_at))+'</span>' +
-        '<span>'+(u.ml ? 'Mercado Livre: '+escapeHtml(u.ml.nickname || "conectado") : 'Mercado Livre não conectado')+'</span></div>' +
+      '<div class="cli-meta"><span class="cli-usage">'+usage+'</span>' +
+        '<span>'+(u.ml ? 'ML: '+escapeHtml(u.ml.nickname || "conectado") : 'ML não conectado')+' · '+(seen ? 'ativo '+escapeHtml(cliAgo(seen)) : 'cadastro '+escapeHtml(fmtDateBR(u.created_at)))+'</span></div>' +
       '<div class="cli-status">'+status+'</div>' +
-      '<div class="cli-act">'+act+'</div>' +
+      '<div class="cli-act"><button class="sx-btn sx-btn--ghost sx-btn--sm" type="button" data-cli-view="'+u.id+'"><svg><use href="#eye"/></svg>Ver conta</button>'+act+'</div>' +
     '</div>';
   }).join("") + '</div>';
 }
@@ -2776,6 +2811,227 @@ function cliAction(action, id){
     renderClientes();
   }).catch(function(){ delete cli.busy[id]; renderClientes(); toast("Sem conexão com o servidor.", true); });
 }
+/* ================= cópia na nuvem + análise das contas (administrador) ================= */
+// Cada cliente guarda no aparelho o que faz no painel; uma cópia vai para a nuvem (tabela sx_user_state)
+// para o cliente usar em outro aparelho e para o administrador analisar a conta.
+var viewAs = null;
+var cloud = { timer: null, ready: false, disabled: false, lastStats: null };
+function cloudKeys(uid){ return ["sx_products_v3:" + uid, "sx_settings_v3:" + uid, "sx_c7_done_v1:" + uid, "sx_c7_steps_v1:" + uid]; }
+function cloudWatch(key){
+  if (!account.user || viewAs || !cloud.ready) return; // antes de comparar com a nuvem, não marca a cópia local como mais nova
+  if (cloudKeys(account.user.id).indexOf(key) === -1) return;
+  try { window.localStorage.setItem("sx_state_ts:" + account.user.id, new Date().toISOString()); } catch(e){}
+  cloudSchedule();
+}
+function cloudSchedule(){
+  if (!account.user || viewAs || cloud.disabled) return;
+  clearTimeout(cloud.timer);
+  cloud.timer = setTimeout(cloudPush, 2500);
+}
+function cloudStats(){
+  var prods = state.products || [], prev = cloud.lastStats || {};
+  var st = {
+    products: prods.length,
+    published: prods.filter(function(p){ return p.mlItemId && !p.testPublish; }).length,
+    seen_at: new Date().toISOString(),
+    ml: !!ml.account
+  };
+  if (mlo.loaded){
+    var ok = (mlo.raw || []).filter(function(o){ return o.status !== "cancelled"; });
+    st.sales90 = ok.length;
+    st.revenue90 = Math.round(ok.reduce(function(a, o){ return a + (Number(o.total) || 0); }, 0) * 100) / 100;
+    var done = c7Done();
+    st.c7_pending = mlo.orders.filter(function(o){ return !o.sim && vdGroup(o) === "toship" && !done[o.id]; }).length;
+  } else {
+    if (prev.sales90 != null) st.sales90 = prev.sales90;
+    if (prev.revenue90 != null) st.revenue90 = prev.revenue90;
+    if (prev.c7_pending != null) st.c7_pending = prev.c7_pending;
+  }
+  return st;
+}
+function cloudPush(){
+  var client = sb();
+  if (!client || !account.user || viewAs || !cloud.ready || cloud.disabled) return Promise.resolve();
+  var uid = account.user.id, stats = cloudStats();
+  cloud.lastStats = stats;
+  var up;
+  try { up = client.from("sx_user_state").upsert({
+    user_id: uid,
+    products: state.products || [],
+    settings: state.settings || null,
+    extra: { c7done: loadJSON("sx_c7_done_v1:" + uid, {}) || {}, c7steps: loadJSON("sx_c7_steps_v1:" + uid, {}) || {} },
+    stats: stats,
+    updated_at: new Date().toISOString()
+  }); } catch(e){ return Promise.resolve(); }
+  return Promise.resolve(up).then(function(r){
+    if (r && r.error && /relation|does not exist|schema cache/i.test(r.error.message || "")) cloud.disabled = true;
+  }).catch(function(){});
+}
+// no login: se a cópia da nuvem for mais nova que a do aparelho, usa a da nuvem
+function cloudPull(uid){
+  var client = sb(); if (!client) return Promise.resolve();
+  cloud.ready = false;
+  var q;
+  try { q = client.from("sx_user_state").select("products, settings, extra, stats, updated_at").eq("user_id", uid).maybeSingle(); }
+  catch(e){ cloud.ready = true; return Promise.resolve(); }
+  return Promise.resolve(q).then(function(r){
+    if (!account.user || account.user.id !== uid) return;
+    if (r && r.error){ if (/relation|does not exist|schema cache/i.test(r.error.message || "")) cloud.disabled = true; cloud.ready = true; return; }
+    var row = r && r.data;
+    var localTs = null; try { localTs = window.localStorage.getItem("sx_state_ts:" + uid); } catch(e){}
+    if (row){
+      cloud.lastStats = row.stats || null;
+      var cloudNewer = !localTs || String(row.updated_at) > localTs;
+      if (cloudNewer && Array.isArray(row.products) && (row.products.length || !state.products.length)){
+        state.products = row.products;
+        if (row.settings) state.settings = row.settings;
+        try {
+          window.localStorage.setItem("sx_products_v3:" + uid, JSON.stringify(state.products));
+          if (row.settings) window.localStorage.setItem("sx_settings_v3:" + uid, JSON.stringify(state.settings));
+          if (row.extra && row.extra.c7done) window.localStorage.setItem("sx_c7_done_v1:" + uid, JSON.stringify(row.extra.c7done));
+          if (row.extra && row.extra.c7steps) window.localStorage.setItem("sx_c7_steps_v1:" + uid, JSON.stringify(row.extra.c7steps));
+          window.localStorage.setItem("sx_state_ts:" + uid, String(row.updated_at));
+        } catch(e){}
+        renderPainel();
+        var pg = currentPage(); if (pg !== "painel") goToPage(pg, true);
+      }
+    }
+    cloud.ready = true;
+    cloudSchedule();
+  }).catch(function(){ cloud.ready = true; });
+}
+
+// ---- modo visualização: o administrador abre o painel com os dados de um cliente (somente leitura) ----
+function enterViewAs(d){
+  if (!d || !d.user) return;
+  viewAs = {
+    id: d.user.id, email: d.user.email || "", name: d.user.name || (d.user.email || "").split("@")[0],
+    extra: (d.state && d.state.extra) || {}, orig: { name: account.name, email: account.email }
+  };
+  clearTimeout(cloud.timer);
+  state.products = d.state && Array.isArray(d.state.products) ? d.state.products : [];
+  state.settings = (d.state && d.state.settings) || defaultSettings();
+  ml.account = d.ml || null; ml.loaded = true; ml.error = null;
+  mlo.raw = (d.sales && d.sales.orders) || [];
+  mlo.orders = mlo.raw.map(mapMlOrder);
+  mlo.loaded = true; mlo.loading = false; mlo.fetchedAt = Date.now(); mlo.error = (d.sales && d.sales.error) || null;
+  state.orders = mlo.orders;
+  account.name = viewAs.name; account.email = viewAs.email;
+  var bar = document.getElementById("viewas-bar");
+  document.getElementById("viewas-who").textContent = viewAs.name + (viewAs.email ? " (" + viewAs.email + ")" : "");
+  bar.hidden = false;
+  document.body.classList.add("is-viewas");
+  document.body.style.setProperty("--viewas-h", bar.offsetHeight + "px");
+  closeCliDetail();
+  renderAccount(); renderVendasCount(); renderIntegracoes(); renderMlMini(); renderOnboarding();
+  goToPage("painel");
+  toast("Você está vendo o painel de " + viewAs.name + ". Nada que você fizer aqui é salvo.");
+}
+function exitViewAs(){
+  viewAs = null;
+  window.location.reload();
+}
+
+// ---- detalhe de um cliente (aba Clientes) ----
+var cld = { id: null, data: null, loading: false, tab: "produtos", error: null };
+function openCliDetail(id){
+  var client = sb(); if (!client || !isAdmin()) return;
+  cld.id = id; cld.data = null; cld.error = null; cld.loading = true; cld.tab = "produtos";
+  document.getElementById("cli-detail").classList.add("is-open");
+  renderCliDetail();
+  client.functions.invoke("sx-admin", { method: "POST", body: { action: "detail", user_id: id } }).then(function(r){
+    if (cld.id !== id) return;
+    cld.loading = false;
+    if (r.data && r.data.ok) cld.data = r.data;
+    else cld.error = (r.data && r.data.error === "unknown_action")
+      ? "O servidor ainda está na versão antiga. Publique a nova função sx-admin para ver os detalhes."
+      : ((r.data && r.data.message) || "Não consegui carregar esta conta agora.");
+    renderCliDetail();
+  }).catch(function(){ if (cld.id !== id) return; cld.loading = false; cld.error = "Sem conexão com o servidor."; renderCliDetail(); });
+}
+function closeCliDetail(){ document.getElementById("cli-detail").classList.remove("is-open"); cld.id = null; }
+function cliProdStatus(p){
+  if (p.mlItemId && !p.testPublish) return '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Publicado</span>' +
+    (p.mlPermalink ? '<a class="cld-ml" href="'+escapeHtml(p.mlPermalink)+'" target="_blank" rel="noopener">'+escapeHtml(p.mlItemId)+' ↗</a>' : '<small class="cld-ml">'+escapeHtml(p.mlItemId)+'</small>');
+  if (p.active === false) return '<span class="sx-badge"><i class="sx-dot"></i>Pausado</span>';
+  return '<span class="sx-badge sx-badge--warning"><i class="sx-dot"></i>Não publicado</span>';
+}
+function renderCliDetail(){
+  var host = document.getElementById("cli-detail-body"); if (!host) return;
+  var base = cli.users.find(function(u){ return u.id === cld.id; }) || {};
+  if (cld.loading || cld.error){
+    host.innerHTML = '<div class="cld-head"><span class="sx-avatar cli-av">'+escapeHtml(initials(base.name || base.email))+'</span><div class="cli-main"><b>'+escapeHtml(base.name || (base.email || "").split("@")[0])+'</b><span>'+escapeHtml(base.email || "")+'</span></div></div>' +
+      '<div class="empty">'+(cld.loading ? 'Carregando a conta e as vendas no Mercado Livre…' : escapeHtml(cld.error))+'</div>';
+    return;
+  }
+  var d = cld.data, u = d.user, st = d.state || {}, prods = Array.isArray(st.products) ? st.products : [];
+  var sales = d.sales || {}, orders = (sales.orders || []).map(function(o){ return o; });
+  var okOrders = orders.filter(function(o){ return o.status !== "cancelled"; });
+  var revenue = okOrders.reduce(function(a, o){ return a + (Number(o.total) || 0); }, 0);
+  var published = prods.filter(function(p){ return p.mlItemId && !p.testPublish; }).length;
+  var done = (st.extra && st.extra.c7done) || {};
+  var status = u.admin ? '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Administrador</span>'
+    : u.pending ? '<span class="sx-badge sx-badge--warning"><i class="sx-dot"></i>Aguardando liberação</span>'
+    : '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Acesso liberado</span>';
+  var kpis = [
+    { l: "Produtos no Sellex", v: fmtInt(prods.length) },
+    { l: "Publicados no ML", v: fmtInt(published) },
+    { l: "Vendas (90 dias)", v: d.ml ? (sales.error ? "—" : fmtInt(okOrders.length)) : "—", s: d.ml && !sales.error && sales.totalAll ? fmtInt(sales.totalAll) + " no total" : "" },
+    { l: "Faturamento (90 dias)", v: d.ml && !sales.error ? fmtBRL(revenue) : "—" }
+  ];
+  var prodRows = prods.length ? prods.map(function(p){
+    return '<tr><td class="prod"><span>'+prodThumb(p)+'</span><div><b>'+escapeHtml(p.title || p.name || "Produto")+'</b>'+(p.sku ? '<small>SKU '+escapeHtml(p.sku)+'</small>' : '')+'</div></td>' +
+      '<td>'+(p.cost != null ? fmtBRL(p.cost) : '—')+'</td><td>'+(p.price != null ? fmtBRL(p.price) : '—')+'</td>' +
+      '<td>'+(p.margin != null ? escapeHtml(String(p.margin)) + '%' : '—')+'</td><td>'+cliProdStatus(p)+'</td></tr>';
+  }).join("") : '';
+  var saleRows = orders.length ? orders.map(function(o){
+    var it = (o.items && o.items[0]) || {}, qty = (o.items || []).reduce(function(a, x){ return a + (x.qty || 0); }, 0) || 1;
+    var sit = o.status === "cancelled" ? '<span class="sx-badge sx-badge--danger"><i class="sx-dot"></i>Cancelada</span>'
+      : o.shipping && o.shipping.status ? '<span class="sx-badge"><i class="sx-dot"></i>'+escapeHtml(ML_SHIP_LABEL[o.shipping.status] || o.shipping.status)+'</span>'
+      : '<span class="sx-badge sx-badge--success"><i class="sx-dot"></i>Paga</span>';
+    var sup = o.status === "cancelled" ? '—' : done["ml_" + o.id] ? '<span class="pos">Feito</span>' : '<span class="neg">Pendente</span>';
+    return '<tr><td>'+escapeHtml(fmtDateBR(o.date))+'</td><td>'+escapeHtml(it.title || "—")+'</td><td>'+fmtInt(qty)+'</td><td>'+fmtBRL(o.total)+'</td><td>'+sit+'</td><td>'+sup+'</td></tr>';
+  }).join("") : '';
+  host.innerHTML =
+    '<div class="cld-head"><span class="sx-avatar cli-av">'+escapeHtml(initials(u.name || u.email))+'</span>' +
+      '<div class="cli-main"><b>'+escapeHtml(u.name || u.email.split("@")[0])+'</b><span>'+escapeHtml(u.email)+'</span></div>'+status+'</div>' +
+    '<div class="cld-meta">' +
+      '<span>Cadastro: <b>'+escapeHtml(fmtDateBR(u.created_at))+'</b></span>' +
+      '<span>Último login: <b>'+(u.last_sign_in_at ? escapeHtml(fmtDateBR(u.last_sign_in_at)) : 'nunca')+'</b></span>' +
+      '<span>Última atividade no painel: <b>'+(st.updated_at ? escapeHtml(fmtDateBR(st.updated_at)) : 'sem registro')+'</b></span>' +
+      '<span>Mercado Livre: <b>'+(d.ml ? escapeHtml(d.ml.nickname || "conectado") + (d.ml.status && d.ml.status !== "connected" ? ' (conexão expirada)' : '') : 'não conectado')+'</b></span>' +
+    '</div>' +
+    '<div class="grid g-4 cld-kpis">' + kpis.map(function(k){ return '<div class="sx-card"><div class="sx-stat__label">'+k.l+'</div><div class="sx-stat__value">'+k.v+'</div>'+(k.s ? '<div class="cld-sub">'+k.s+'</div>' : '')+'</div>'; }).join("") + '</div>' +
+    (sales.error ? '<p class="cld-note">'+escapeHtml(sales.error)+'</p>' : '') +
+    (!d.state ? '<p class="cld-note">Ainda não há cópia dos produtos deste cliente. Ela aparece aqui assim que ele entrar no Sellex de novo.</p>' : '') +
+    '<div class="cld-actions">' +
+      '<button type="button" class="sx-btn sx-btn--sm" data-cld="viewas"><svg><use href="#eye"/></svg>Abrir o painel como este cliente</button>' +
+      (u.admin ? '' : u.pending
+        ? '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-cli-act="approve" data-id="'+u.id+'">Liberar acesso</button>'
+        : '<button type="button" class="sx-btn sx-btn--ghost sx-btn--sm" data-cli-act="block" data-id="'+u.id+'">Bloquear</button>') +
+    '</div>' +
+    '<div class="sx-tabs cld-tabs" role="tablist">' +
+      '<button class="sx-tab" type="button" data-cld-tab="produtos" aria-selected="'+(cld.tab === "produtos")+'">Produtos ('+fmtInt(prods.length)+')</button>' +
+      '<button class="sx-tab" type="button" data-cld-tab="vendas" aria-selected="'+(cld.tab === "vendas")+'">Vendas ('+fmtInt(orders.length)+')</button>' +
+    '</div>' +
+    (cld.tab === "produtos"
+      ? (prodRows ? '<div class="cld-table"><table class="sx-table"><thead><tr><th>Produto</th><th>Custo</th><th>Preço</th><th>Margem</th><th>Situação</th></tr></thead><tbody>'+prodRows+'</tbody></table></div>' : '<div class="empty">Nenhum produto adicionado.</div>')
+      : (saleRows ? '<div class="cld-table"><table class="sx-table"><thead><tr><th>Data</th><th>Produto</th><th>Qtd.</th><th>Total</th><th>Situação</th><th>Fornecedor</th></tr></thead><tbody>'+saleRows+'</tbody></table></div>'
+        : '<div class="empty">'+(d.ml ? 'Nenhuma venda nos últimos 90 dias.' : 'O Mercado Livre desta conta não está conectado.')+'</div>'));
+}
+function initCliDetail(){
+  var m = document.getElementById("cli-detail");
+  m.addEventListener("click", function(e){
+    if (e.target === m || e.target.closest("[data-cld=close]")){ closeCliDetail(); return; }
+    var t = e.target.closest("[data-cld-tab]");
+    if (t){ cld.tab = t.getAttribute("data-cld-tab"); renderCliDetail(); return; }
+    if (e.target.closest("[data-cld=viewas]") && cld.data){ enterViewAs(cld.data); return; }
+    var a = e.target.closest("[data-cli-act]");
+    if (a){ cliAction(a.getAttribute("data-cli-act"), a.getAttribute("data-id")); setTimeout(function(){ if (cld.data){ var u = cli.users.find(function(x){ return x.id === cld.id; }); if (u) cld.data.user.pending = u.pending; renderCliDetail(); } }, 900); }
+  });
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape" && m.classList.contains("is-open")) closeCliDetail(); });
+  document.getElementById("viewas-exit").addEventListener("click", exitViewAs);
+}
 function initClientes(){
   document.getElementById("cli-tabs").addEventListener("click", function(e){
     var b = e.target.closest("[data-cli]"); if (!b) return;
@@ -2790,11 +3046,15 @@ function initClientes(){
     if (!emails.length){ toast("Nenhum e-mail nesta lista.", true); return; }
     copyText(emails.join(", ")).then(function(){ toast(emails.length + " e-mail(s) copiado(s)."); }).catch(function(){ toast("Não consegui copiar.", true); });
   });
+  document.getElementById("cli-sort").addEventListener("change", function(e){ cli.sort = e.target.value; renderClientes(); });
   document.getElementById("page-clientes").addEventListener("click", function(e){
     var b = e.target.closest("[data-cli-act]");
-    if (b && !b.disabled) cliAction(b.getAttribute("data-cli-act"), b.getAttribute("data-id"));
-    if (e.target.closest("#cli-retry")){ e.preventDefault(); loadClientes(); }
+    if (b && !b.disabled){ cliAction(b.getAttribute("data-cli-act"), b.getAttribute("data-id")); return; }
+    if (e.target.closest("#cli-retry")){ e.preventDefault(); loadClientes(); return; }
+    var v = e.target.closest("[data-cli-view]");
+    if (v){ openCliDetail(v.getAttribute("data-cli-view")); return; }
   });
+  initCliDetail();
 }
 
 /* ================= configurações ================= */
